@@ -28,6 +28,26 @@ function formatBytes(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+const AUDIO_EXTENSIONS = new Set([
+  ".mp3",
+  ".wav",
+  ".m4a",
+  ".aac",
+  ".ogg",
+  ".flac",
+  ".webm",
+  ".mpeg",
+  ".mp4",
+  ".oga",
+]);
+
+function isLikelyAudioFile(file: File): boolean {
+  if (file.type.startsWith("audio/")) return true;
+  const m = /\.[^.]+$/i.exec(file.name);
+  const ext = m ? m[0].toLowerCase() : "";
+  return ext !== "" && AUDIO_EXTENSIONS.has(ext);
+}
+
 /** Shared height for the Audio upload area and Chat message list. */
 const MAIN_PANEL_HEIGHT_CLASS = "h-[min(50vh,22rem)]";
 
@@ -43,18 +63,70 @@ export function AudioChatTabs({ className }: { className?: string }) {
   const [input, setInput] = React.useState("");
   const [isSending, setIsSending] = React.useState(false);
   const scrollAnchorRef = React.useRef<HTMLDivElement>(null);
+  const audioDropDepthRef = React.useRef(0);
+  const [isAudioDropActive, setIsAudioDropActive] = React.useState(false);
 
   React.useEffect(() => {
     scrollAnchorRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isSending]);
+
+  const appendAudioFiles = React.useCallback((incoming: Iterable<File>) => {
+    const accepted = [...incoming].filter(isLikelyAudioFile);
+    if (accepted.length === 0) return;
+    setAudioFiles((prev) => [...prev, ...accepted]);
+  }, []);
 
   const onPickFile = () => fileInputRef.current?.click();
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files ? Array.from(e.target.files) : [];
     if (files.length === 0) return;
-    setAudioFiles((prev) => [...prev, ...files]);
+    appendAudioFiles(files);
     if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const resetAudioDropState = React.useCallback(() => {
+    audioDropDepthRef.current = 0;
+    setIsAudioDropActive(false);
+  }, []);
+
+  React.useEffect(() => {
+    if (isProcessingAudio) resetAudioDropState();
+  }, [isProcessingAudio, resetAudioDropState]);
+
+  const onAudioDragEnter = (e: React.DragEvent) => {
+    if (isProcessingAudio) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const types = [...e.dataTransfer.types];
+    if (!types.includes("Files")) return;
+    audioDropDepthRef.current += 1;
+    setIsAudioDropActive(true);
+  };
+
+  const onAudioDragLeave = (e: React.DragEvent) => {
+    if (isProcessingAudio) return;
+    e.preventDefault();
+    e.stopPropagation();
+    audioDropDepthRef.current = Math.max(0, audioDropDepthRef.current - 1);
+    if (audioDropDepthRef.current === 0) setIsAudioDropActive(false);
+  };
+
+  const onAudioDragOver = (e: React.DragEvent) => {
+    if (isProcessingAudio) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "copy";
+  };
+
+  const onAudioDrop = (e: React.DragEvent) => {
+    if (isProcessingAudio) return;
+    e.preventDefault();
+    e.stopPropagation();
+    resetAudioDropState();
+    if (e.dataTransfer.files?.length) {
+      appendAudioFiles(e.dataTransfer.files);
+    }
   };
 
   const removeAudioAt = (idx: number) => {
@@ -259,8 +331,8 @@ export function AudioChatTabs({ className }: { className?: string }) {
 
         <TabsContent value="audio" className="mt-0 flex flex-col gap-3">
           <p className="text-muted-foreground text-sm">
-            Upload one or more audio files. Each file is transcribed and then processed
-            for scheduling response.
+            Drag and drop audio files here or use the buttons below. Each file is transcribed
+            and then processed for a scheduling response.
           </p>
           <input
             ref={fileInputRef}
@@ -273,23 +345,48 @@ export function AudioChatTabs({ className }: { className?: string }) {
           <div
             className={cn(
               MAIN_PANEL_HEIGHT_CLASS,
-              "overflow-hidden rounded-lg bg-muted/15",
+              "overflow-hidden rounded-lg bg-muted/15 transition-[box-shadow,background-color,border-color]",
+              isAudioDropActive &&
+                "border-primary/60 bg-primary/8 ring-primary/40 ring-2 ring-offset-2 ring-offset-background",
             )}
+            onDragEnter={onAudioDragEnter}
+            onDragLeave={onAudioDragLeave}
+            onDragOver={onAudioDragOver}
+            onDrop={onAudioDrop}
           >
             {audioFiles.length === 0 ? (
               <button
                 type="button"
                 onClick={onPickFile}
-                className="hover:border-primary/50 flex h-full w-full flex-col items-center justify-center gap-3 rounded-md border-2 border-dashed border-border/80 bg-muted/30 px-6 transition-colors"
+                disabled={isProcessingAudio}
+                className={cn(
+                  "flex h-full w-full flex-col items-center justify-center gap-3 rounded-md border-2 border-dashed px-6 transition-colors",
+                  isAudioDropActive
+                    ? "border-primary bg-primary/10"
+                    : "border-border/80 bg-muted/30 hover:border-primary/50",
+                  isProcessingAudio && "pointer-events-none opacity-60",
+                )}
               >
-                <Upload className="text-muted-foreground size-10" />
-                <span className="text-sm font-medium">Click to upload audio files</span>
-                <span className="text-muted-foreground text-xs">
-                  MP3, WAV, M4A, and other common formats (multi-select supported)
+                <Upload className="text-muted-foreground size-10" aria-hidden />
+                <span className="text-sm font-medium">
+                  {isAudioDropActive ? "Drop audio files here" : "Click or drag audio files here"}
+                </span>
+                <span className="text-muted-foreground text-xs text-center text-pretty">
+                  MP3, WAV, M4A, and other common formats · multi-file and drag-and-drop supported
                 </span>
               </button>
             ) : (
-              <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto p-4">
+              <div
+                className={cn(
+                  "flex h-full min-h-0 flex-col gap-3 overflow-y-auto p-4",
+                  isAudioDropActive && "bg-primary/5",
+                )}
+              >
+                {isAudioDropActive ? (
+                  <div className="border-primary/50 bg-primary/10 text-primary flex shrink-0 items-center justify-center rounded-md border border-dashed py-6 text-sm font-medium">
+                    Drop to add to queue
+                  </div>
+                ) : null}
                 {audioFiles.map((file, idx) => (
                   <div
                     key={`${file.name}-${file.size}-${idx}`}
