@@ -1,6 +1,8 @@
-import type { DayKey, DoctorProfile } from "@/lib/doctor-profiles";
+import type { DayKey } from "@/lib/doctor-profiles";
 
 import type { IntentExtraction } from "./types";
+
+export { buildIntentPrompt, INTENT_EXTRACTION_RULE_LINES } from "./intent-prompt-template";
 
 export const DEFAULT_CHAT_MODEL = "gpt-4o-mini";
 
@@ -53,67 +55,6 @@ export function normalizeIntent(raw: unknown): IntentExtraction {
         : null,
     notes: typeof o.notes === "string" && o.notes.trim() ? o.notes.trim() : null,
   };
-}
-
-export function buildIntentPrompt(
-  today: string,
-  timezone: string,
-  doctors: DoctorProfile[],
-  templateOverride: string | null,
-): string {
-  const doctorContext = doctors.map((d) => ({
-    id: d.id,
-    name: d.name,
-    expertise: d.expertise,
-    schedule: d.schedule.map((s) => ({
-      day: s.day,
-      closed: s.closed,
-      start: s.start,
-      end: s.end,
-    })),
-  }));
-  const defaultTemplate = [
-    "You are an intent extractor for a dental clinic scheduler.",
-    "Today's date: {{today_date}}. Timezone: {{timezone}}.",
-    "Use the doctor's live schedules below as your reference context.",
-    "",
-    "Return JSON only with this schema:",
-    "{",
-    '  "scope": "in_scope" | "out_of_scope" | "unclear",',
-    '  "intent": "book" | "reschedule" | "cancel" | "question" | "other",',
-    '  "confidence": number (0..1),',
-    '  "doctorName": string | null,',
-    '  "requestedDate": "YYYY-MM-DD" | null,',
-    '  "requestedTime24h": "HH:mm" | null,',
-    '  "requestedStartIso": ISO-8601 datetime | null,',
-    '  "notes": string | null',
-    "}",
-    "",
-    "Rules:",
-    "- Out of scope means non-dental medical requests; mark scope=out_of_scope.",
-    "- If user asks to book, set intent=book even if date/time is incomplete.",
-    "- Prefer explicit date/time from the user; do not invent impossible details.",
-    "- doctorName: set only when the user explicitly names or chooses a doctor (e.g. \"with Dr. Kim\").",
-    "  For open-ended requests — earliest appointment, soonest, next available, any doctor, no preference — use doctorName=null so every doctor can be considered.",
-    "- For earliest/next-available style requests where the user did not state a specific clock time or date, leave requestedDate, requestedTime24h, and requestedStartIso null.",
-    "  Do not guess a datetime from the schedule list; null lets the app search the soonest real openings across doctors.",
-    "- Keep notes short and factual.",
-    "- Always provide confidence between 0 and 1.",
-    "{{clinic_style_instructions}}",
-    "",
-    "Doctor schedules context: {{doctor_info_json}}",
-  ].join("\n");
-
-  const template =
-    typeof templateOverride === "string" && templateOverride.trim()
-      ? templateOverride
-      : defaultTemplate;
-
-  return template
-    .replaceAll("{{today_date}}", today)
-    .replaceAll("{{timezone}}", timezone)
-    .replaceAll("{{doctor_info_json}}", JSON.stringify(doctorContext))
-    .replaceAll("{{clinic_style_instructions}}", "");
 }
 
 export function isoToday() {

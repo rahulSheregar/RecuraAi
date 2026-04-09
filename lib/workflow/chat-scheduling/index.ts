@@ -5,6 +5,7 @@ export {
   fetchIntentFromOpenAI,
   isoToday,
   normalizeIntent,
+  INTENT_EXTRACTION_RULE_LINES,
 } from "./intent";
 export { parseRunMetadata } from "./metadata";
 export type {

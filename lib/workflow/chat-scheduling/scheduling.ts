@@ -105,6 +105,8 @@ export function computeSchedulingDecision(
     intent: IntentExtraction;
     latestUserMessage: string;
     futureAppointments: FutureAppointmentStub[];
+    /** Wall-clock anchor for tests and simulations (defaults to runtime `Date`). */
+    asOf?: Date;
   },
   onBook: (args: {
     doctorId: string;
@@ -114,6 +116,10 @@ export function computeSchedulingDecision(
   }) => void,
 ): SchedulingDecision {
   const { doctors, intent, latestUserMessage, futureAppointments } = input;
+  const asOf = input.asOf ?? new Date();
+  const asOfMs = asOf.getTime();
+  const startOfAsOfDay = new Date(asOf);
+  startOfAsOfDay.setHours(0, 0, 0, 0);
 
   let reply = "";
   let outcome = "replied";
@@ -157,9 +163,8 @@ export function computeSchedulingDecision(
 
       const slotEnd = requestedStart ? addMinutes(requestedStart, SLOT_MINUTES) : null;
       let booked = false;
-      const userAskedConcreteSlot = Boolean(
-        intent.requestedStartIso || (intent.requestedDate && intent.requestedTime24h),
-      );
+      /** True only when we parsed a real instant — invalid ISO/date parts are treated as open-ended search. */
+      const userAskedConcreteSlot = requestedStart !== null;
 
       if (requestedStart && slotEnd) {
         for (const doctor of candidateDoctors) {
@@ -189,11 +194,10 @@ export function computeSchedulingDecision(
 
       if (!booked) {
         const alternatives: { doctor: DoctorProfile; start: Date }[] = [];
-        const nowDate = new Date();
         const horizonDays = 21;
         for (let i = 0; i <= horizonDays && alternatives.length < 4; i++) {
-          const day = new Date(nowDate);
-          day.setDate(nowDate.getDate() + i);
+          const day = new Date(startOfAsOfDay);
+          day.setDate(startOfAsOfDay.getDate() + i);
           day.setHours(0, 0, 0, 0);
           for (const doctor of candidateDoctors) {
             const daySchedule = doctor.schedule.find((s) => s.day === toDayKey(day));
@@ -207,7 +211,7 @@ export function computeSchedulingDecision(
               const slotStart = new Date(day);
               slotStart.setHours(Math.floor(mins / 60), mins % 60, 0, 0);
               const slotEndCandidate = addMinutes(slotStart, SLOT_MINUTES);
-              if (slotStart.getTime() < Date.now()) continue;
+                if (slotStart.getTime() < asOfMs) continue;
               if (hasConflict(futureAppointments, doctor.id, slotStart, slotEndCandidate)) continue;
               alternatives.push({ doctor, start: slotStart });
               break;

@@ -5,6 +5,7 @@ import {
   IconHeartbeat,
   IconHome,
   IconSettings,
+  IconTestPipe,
   IconUser,
 } from "@tabler/icons-react";
 
@@ -23,6 +24,13 @@ const dockItems = [
     href: "/status",
     icon: (
       <IconHeartbeat className="h-full w-full text-neutral-500 dark:text-neutral-300" />
+    ),
+  },
+  {
+    title: "Backtesting",
+    href: "/backtest",
+    icon: (
+      <IconTestPipe className="h-full w-full text-neutral-500 dark:text-neutral-300" />
     ),
   },
   {
