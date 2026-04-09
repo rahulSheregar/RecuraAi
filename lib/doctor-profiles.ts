@@ -62,7 +62,8 @@ export function formatScheduleSummary(schedule: DaySchedule[]): string {
     .join(" · ");
 }
 
-function normalizeProfile(raw: unknown): DoctorProfile | null {
+/** Validate and coerce API/DB payloads into a {@link DoctorProfile}. */
+export function normalizeDoctorProfile(raw: unknown): DoctorProfile | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
   if (typeof o.id !== "string" || typeof o.name !== "string") return null;
@@ -93,7 +94,7 @@ export function loadProfiles(): DoctorProfile[] {
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
     return parsed
-      .map(normalizeProfile)
+      .map(normalizeDoctorProfile)
       .filter((p): p is DoctorProfile => p !== null);
   } catch {
     return [];

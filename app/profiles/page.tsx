@@ -9,7 +9,11 @@ export default function ProfilesPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Doctor profiles</h1>
           <p className="text-muted-foreground text-sm text-pretty">
             Create and manage doctor records: name, areas of expertise, and weekly
-            working hours. Data is stored in this browser until you connect a backend.
+            working hours. Profiles are stored in the server SQLite database (
+            <code className="text-foreground/90">data/recura.db</code>
+            ). “Load sample doctors” replaces all rows with the built-in edge-case
+            scenario; <code className="text-foreground/90">npm run scenario:doctors</code>{" "}
+            seeds the same data from the CLI.
           </p>
         </header>
         <DoctorProfilesManager />

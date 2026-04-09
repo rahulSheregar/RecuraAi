@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { FlaskConical, Pencil, Plus, Trash2 } from "lucide-react";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
@@ -27,8 +27,6 @@ import {
   DAY_ORDER,
   emptyProfile,
   formatScheduleSummary,
-  loadProfiles,
-  saveProfiles,
 } from "@/lib/doctor-profiles";
 import { cn } from "@/lib/utils";
 
@@ -42,18 +40,31 @@ function cloneProfile(p: DoctorProfile): DoctorProfile {
 export function DoctorProfilesManager() {
   const [profiles, setProfiles] = React.useState<DoctorProfile[]>([]);
   const [hydrated, setHydrated] = React.useState(false);
+  const [loadError, setLoadError] = React.useState<string | null>(null);
+  const [actionError, setActionError] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState(false);
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [draft, setDraft] = React.useState<DoctorProfile>(() => emptyProfile());
 
-  React.useEffect(() => {
-    setProfiles(loadProfiles());
-    setHydrated(true);
+  const refreshProfiles = React.useCallback(async () => {
+    const res = await fetch("/api/doctors");
+    const data = (await res.json()) as unknown;
+    if (!res.ok) {
+      const msg =
+        data && typeof data === "object" && "error" in data
+          ? String((data as { error: string }).error)
+          : res.statusText;
+      setLoadError(msg);
+      return;
+    }
+    setLoadError(null);
+    setProfiles(Array.isArray(data) ? (data as DoctorProfile[]) : []);
   }, []);
 
   React.useEffect(() => {
-    if (!hydrated) return;
-    saveProfiles(profiles);
-  }, [profiles, hydrated]);
+    setHydrated(true);
+    void refreshProfiles();
+  }, [refreshProfiles]);
 
   const openCreate = () => {
     setDraft(emptyProfile());
@@ -65,26 +76,94 @@ export function DoctorProfilesManager() {
     setDialogOpen(true);
   };
 
-  const saveDraft = () => {
+  const saveDraft = async () => {
     const name = draft.name.trim();
     if (!name) return;
 
-    const id = draft.id || crypto.randomUUID();
-    const next: DoctorProfile = { ...draft, id, name, expertise: draft.expertise.trim() };
-
-    setProfiles((list) => {
-      const idx = list.findIndex((x) => x.id === id);
-      if (idx === -1) return [...list, next];
-      const copy = [...list];
-      copy[idx] = next;
-      return copy;
-    });
-    setDialogOpen(false);
+    setBusy(true);
+    setActionError(null);
+    try {
+      const body: DoctorProfile = {
+        ...draft,
+        id: draft.id,
+        name,
+        expertise: draft.expertise.trim(),
+      };
+      const res = await fetch("/api/doctors", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = (await res.json()) as unknown;
+      if (!res.ok) {
+        const msg =
+          data && typeof data === "object" && "error" in data
+            ? String((data as { error: string }).error)
+            : res.statusText;
+        setActionError(msg);
+        return;
+      }
+      const saved = data as DoctorProfile;
+      setProfiles((list) => {
+        const idx = list.findIndex((x) => x.id === saved.id);
+        if (idx === -1) return [...list, saved];
+        const copy = [...list];
+        copy[idx] = saved;
+        return copy;
+      });
+      setDialogOpen(false);
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const remove = (id: string) => {
+  const remove = async (id: string) => {
     if (!window.confirm("Remove this doctor profile?")) return;
-    setProfiles((list) => list.filter((p) => p.id !== id));
+    setBusy(true);
+    setActionError(null);
+    try {
+      const res = await fetch(`/api/doctors/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      const data = (await res.json()) as unknown;
+      if (!res.ok) {
+        const msg =
+          data && typeof data === "object" && "error" in data
+            ? String((data as { error: string }).error)
+            : res.statusText;
+        setActionError(msg);
+        return;
+      }
+      setProfiles((list) => list.filter((p) => p.id !== id));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const loadSampleScenario = async () => {
+    if (
+      !window.confirm(
+        "Replace all doctor profiles in the database with the built-in edge-case scenario (11 doctors)?",
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    setActionError(null);
+    try {
+      const res = await fetch("/api/doctors/seed-sample", { method: "POST" });
+      const data = (await res.json()) as {
+        doctors?: DoctorProfile[];
+        error?: string;
+      };
+      if (!res.ok) {
+        setActionError(data.error ?? res.statusText);
+        return;
+      }
+      setProfiles(data.doctors ?? []);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const updateScheduleDay = (day: DaySchedule["day"], patch: Partial<DaySchedule>) => {
@@ -98,12 +177,33 @@ export function DoctorProfilesManager() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex justify-end">
-        <Button type="button" onClick={openCreate} className="gap-1.5">
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => void loadSampleScenario()}
+          disabled={busy}
+          className="gap-1.5"
+        >
+          <FlaskConical className="size-4" />
+          Load sample doctors
+        </Button>
+        <Button type="button" onClick={openCreate} disabled={busy} className="gap-1.5">
           <Plus className="size-4" />
           Add profile
         </Button>
       </div>
+
+      {loadError ? (
+        <p className="text-destructive text-sm" role="alert">
+          Could not load doctors: {loadError}
+        </p>
+      ) : null}
+      {actionError ? (
+        <p className="text-destructive text-sm" role="alert">
+          {actionError}
+        </p>
+      ) : null}
 
       {!hydrated ? (
         <p className="text-muted-foreground text-sm">Loading…</p>
@@ -144,7 +244,7 @@ export function DoctorProfilesManager() {
                         type="button"
                         variant="outline"
                         size="icon-sm"
-                        onClick={() => remove(p.id)}
+                        onClick={() => void remove(p.id)}
                         aria-label={`Delete ${p.name}`}
                         className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                       >
@@ -280,7 +380,11 @@ export function DoctorProfilesManager() {
             <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
               Cancel
             </Button>
-            <Button type="button" onClick={saveDraft} disabled={!draft.name.trim()}>
+            <Button
+              type="button"
+              onClick={() => void saveDraft()}
+              disabled={!draft.name.trim() || busy}
+            >
               {draft.id ? "Save changes" : "Create profile"}
             </Button>
           </div>

@@ -51,9 +51,21 @@ export const appointmentStubs = sqliteTable(
   (t) => [index("idx_appointments_run_id").on(t.runId)],
 );
 
+/** Doctor directory (scheduling / workflows). */
+export const doctorProfiles = sqliteTable("doctor_profiles", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  expertise: text("expertise").notNull(),
+  /** JSON: DaySchedule[] */
+  scheduleJson: text("schedule_json").notNull(),
+  updatedAt: integer("updated_at", { mode: "number" }).notNull(),
+});
+
 export type WorkflowRun = typeof workflowRuns.$inferSelect;
 export type WorkflowRunInsert = typeof workflowRuns.$inferInsert;
 export type WorkflowStepRun = typeof workflowStepRuns.$inferSelect;
 export type WorkflowStepRunInsert = typeof workflowStepRuns.$inferInsert;
 export type AppointmentStub = typeof appointmentStubs.$inferSelect;
 export type AppointmentStubInsert = typeof appointmentStubs.$inferInsert;
+export type DoctorProfileRow = typeof doctorProfiles.$inferSelect;
+export type DoctorProfileRowInsert = typeof doctorProfiles.$inferInsert;
