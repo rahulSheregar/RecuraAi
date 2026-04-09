@@ -4,6 +4,8 @@ import * as React from "react";
 
 import { useAiSettings } from "@/components/ai-settings-provider";
 import { Button } from "@/components/ui/button";
+import { clearRecuraLocalStorage } from "@/lib/client-storage-reset";
+import { defaultPrompts } from "@/lib/ai-prompts-storage";
 import {
   Card,
   CardContent,
@@ -18,6 +20,36 @@ import { Textarea } from "@/components/ui/textarea";
 export function SettingsView() {
   const { apiKey, setApiKey, prompts, setPrompts, promptsHydrated } = useAiSettings();
   const [showKey, setShowKey] = React.useState(false);
+  const [resetBusy, setResetBusy] = React.useState(false);
+  const [resetMessage, setResetMessage] = React.useState<string | null>(null);
+  const [resetError, setResetError] = React.useState<string | null>(null);
+
+  const resetApplication = async () => {
+    if (
+      !window.confirm(
+        "Reset RecuraAi to its initial state? This deletes all rows in the SQLite database (doctors, workflow runs, appointments), clears your OpenAI key from this tab’s memory, and removes Recura data from browser storage (including custom prompts).",
+      )
+    ) {
+      return;
+    }
+    setResetBusy(true);
+    setResetMessage(null);
+    setResetError(null);
+    try {
+      const res = await fetch("/api/reset-app", { method: "POST" });
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) {
+        setResetError(data.error ?? res.statusText);
+        return;
+      }
+      setApiKey("");
+      clearRecuraLocalStorage();
+      setPrompts(defaultPrompts);
+      setResetMessage("Application data was reset. Profiles and workflows start empty.");
+    } finally {
+      setResetBusy(false);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -110,6 +142,35 @@ export function SettingsView() {
               </div>
             </>
           )}
+        </CardContent>
+      </Card>
+
+      <Card className="border-destructive/40">
+        <CardHeader>
+          <CardTitle>Reset application</CardTitle>
+          <CardDescription className="text-pretty">
+            Return the app to a clean slate: empty the server database, clear the API key kept in this tab’s memory, and wipe Recura entries in localStorage (including prompts and any legacy profile cache).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={() => void resetApplication()}
+            disabled={resetBusy}
+          >
+            {resetBusy ? "Resetting…" : "Reset to initial state"}
+          </Button>
+          {resetMessage ? (
+            <p className="text-muted-foreground text-sm text-pretty" role="status">
+              {resetMessage}
+            </p>
+          ) : null}
+          {resetError ? (
+            <p className="text-destructive text-sm text-pretty" role="alert">
+              {resetError}
+            </p>
+          ) : null}
         </CardContent>
       </Card>
     </div>

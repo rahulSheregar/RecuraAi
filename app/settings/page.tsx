@@ -9,7 +9,8 @@ export default function SettingsPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
           <p className="text-muted-foreground text-sm text-pretty">
             Configure how RecuraAi talks to OpenAI. Keys pasted here stay in memory only;
-            prompts are stored in this browser.
+            prompts are stored in this browser. Use Reset application at the bottom to wipe
+            the database and clear memory plus local storage for this app.
           </p>
         </header>
         <SettingsView />
