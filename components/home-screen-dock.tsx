@@ -1,8 +1,8 @@
 "use client";
 
 import {
-  IconActivity,
   IconCalendar,
+  IconHeartbeat,
   IconHome,
   IconSettings,
   IconUser,
@@ -22,7 +22,7 @@ const dockItems = [
     title: "Status",
     href: "#",
     icon: (
-      <IconActivity className="h-full w-full text-neutral-500 dark:text-neutral-300" />
+      <IconHeartbeat className="h-full w-full text-neutral-500 dark:text-neutral-300" />
     ),
   },
   {
@@ -33,7 +33,7 @@ const dockItems = [
     ),
   },
   {
-    title: "Profile",
+    title: "Profiles",
     href: "#",
     icon: (
       <IconUser className="h-full w-full text-neutral-500 dark:text-neutral-300" />
