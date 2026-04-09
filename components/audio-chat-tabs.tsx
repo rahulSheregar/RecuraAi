@@ -126,7 +126,7 @@ export function AudioChatTabs({ className }: { className?: string }) {
           <div
             className={cn(
               MAIN_PANEL_HEIGHT_CLASS,
-              "overflow-hidden rounded-lg border border-border bg-muted/15",
+              "overflow-hidden rounded-lg bg-muted/15",
             )}
           >
             {!audioFile ? (
