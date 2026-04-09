@@ -1,14 +1,10 @@
 export type AiPrompts = {
-  chatSystem: string;
-  audioPrompt: string;
   schedulingPromptTemplate: string;
 };
 
 export const PROMPTS_STORAGE_KEY = "recura-ai-prompts-v1";
 
 export const defaultPrompts: AiPrompts = {
-  chatSystem: "",
-  audioPrompt: "",
   schedulingPromptTemplate: `You are an intent extractor for a dental clinic scheduler.
 Today's date: {{today_date}}. Timezone: {{timezone}}.
 Use the doctor's live schedules below as your reference context.
@@ -45,8 +41,6 @@ export function loadPrompts(): AiPrompts {
     if (!parsed || typeof parsed !== "object") return defaultPrompts;
     const o = parsed as Record<string, unknown>;
     return {
-      chatSystem: typeof o.chatSystem === "string" ? o.chatSystem : "",
-      audioPrompt: typeof o.audioPrompt === "string" ? o.audioPrompt : "",
       schedulingPromptTemplate:
         typeof o.schedulingPromptTemplate === "string" && o.schedulingPromptTemplate.trim()
           ? o.schedulingPromptTemplate

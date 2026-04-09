@@ -161,7 +161,6 @@ function buildIntentPrompt(
   today: string,
   timezone: string,
   doctors: DoctorProfile[],
-  customSystemPrompt: string,
   templateOverride: string | null,
 ): string {
   const doctorContext = doctors.map((d) => ({
@@ -212,10 +211,7 @@ function buildIntentPrompt(
     .replaceAll("{{today_date}}", today)
     .replaceAll("{{timezone}}", timezone)
     .replaceAll("{{doctor_info_json}}", JSON.stringify(doctorContext))
-    .replaceAll(
-      "{{clinic_style_instructions}}",
-      customSystemPrompt ? `Clinic style instructions: ${customSystemPrompt}` : "",
-    );
+    .replaceAll("{{clinic_style_instructions}}", "");
 }
 
 function randomPatientName(): string {
@@ -261,7 +257,6 @@ export async function POST(request: Request) {
     const body = (await request.json()) as {
       messages?: unknown;
       apiKey?: unknown;
-      systemPrompt?: unknown;
       schedulingPromptTemplate?: unknown;
       threadId?: unknown;
     };
@@ -352,7 +347,6 @@ export async function POST(request: Request) {
       today,
       timezone,
       doctors,
-      typeof body.systemPrompt === "string" ? body.systemPrompt.trim() : "",
       typeof body.schedulingPromptTemplate === "string"
         ? body.schedulingPromptTemplate
         : null,

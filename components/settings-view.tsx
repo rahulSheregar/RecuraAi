@@ -34,6 +34,7 @@ export function SettingsView() {
   const [resetMessage, setResetMessage] = React.useState<string | null>(null);
   const [resetError, setResetError] = React.useState<string | null>(null);
   const [resetConfirmOpen, setResetConfirmOpen] = React.useState(false);
+  const [promptStatus, setPromptStatus] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     setDraftApiKey(apiKey);
@@ -57,6 +58,11 @@ export function SettingsView() {
     } finally {
       setResetBusy(false);
     }
+  };
+
+  const setPromptPatch = (patch: Partial<typeof prompts>) => {
+    setPrompts((p) => ({ ...p, ...patch }));
+    setPromptStatus("Prompt changes saved.");
   };
 
   return (
@@ -141,8 +147,9 @@ export function SettingsView() {
         <CardHeader>
           <CardTitle>Prompts</CardTitle>
           <CardDescription>
-            Saved in this browser (localStorage). Used when calling the AI from chat and
-            reserved for future audio flows.
+            Saved in this browser (localStorage). These are the exact prompts used at
+            runtime for scheduling:{" "}
+            <code className="rounded bg-muted px-1 py-0.5 text-xs">Scheduling template</code>.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -150,51 +157,79 @@ export function SettingsView() {
             <p className="text-muted-foreground text-sm">Loading prompts…</p>
           ) : (
             <>
-              <div className="grid gap-2">
-                <Label htmlFor="prompt-chat">Chat — system prompt</Label>
-                <Textarea
-                  id="prompt-chat"
-                  value={prompts.chatSystem}
-                  onChange={(e) =>
-                    setPrompts((p) => ({ ...p, chatSystem: e.target.value }))
-                  }
-                  placeholder="Optional. Overrides default assistant behavior for the chat tab (e.g. tone, medical documentation style, brevity)."
-                  rows={5}
-                  className="min-h-[6rem] resize-y"
-                />
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setPrompts(defaultPrompts);
+                    setPromptStatus("Reset all prompts to original defaults.");
+                  }}
+                >
+                  Reset all prompts
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setPrompts({
+                      schedulingPromptTemplate: "",
+                    });
+                    setPromptStatus("Cleared all prompt fields.");
+                  }}
+                >
+                  Clear all prompts
+                </Button>
               </div>
+              {promptStatus ? (
+                <p className="text-muted-foreground text-xs" role="status">
+                  {promptStatus}
+                </p>
+              ) : null}
               <div className="grid gap-2">
-                <Label htmlFor="prompt-audio">Audio — instructions</Label>
-                <Textarea
-                  id="prompt-audio"
-                  value={prompts.audioPrompt}
-                  onChange={(e) =>
-                    setPrompts((p) => ({ ...p, audioPrompt: e.target.value }))
-                  }
-                  placeholder="Optional. For future use when processing uploaded audio (e.g. how to summarize or transcribe)."
-                  rows={5}
-                  className="min-h-[6rem] resize-y"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="prompt-scheduling-template">
-                  Scheduling — extraction prompt template
-                </Label>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Label htmlFor="prompt-scheduling-template">
+                    Scheduling — extraction prompt template
+                  </Label>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setPromptPatch({
+                          schedulingPromptTemplate:
+                            defaultPrompts.schedulingPromptTemplate,
+                        })
+                      }
+                    >
+                      Reset
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setPromptPatch({ schedulingPromptTemplate: "" })}
+                    >
+                      Clear
+                    </Button>
+                  </div>
+                </div>
                 <Textarea
                   id="prompt-scheduling-template"
                   value={prompts.schedulingPromptTemplate}
                   onChange={(e) =>
-                    setPrompts((p) => ({
-                      ...p,
-                      schedulingPromptTemplate: e.target.value,
-                    }))
+                    setPromptPatch({ schedulingPromptTemplate: e.target.value })
                   }
                   placeholder="Template used for AI extraction in /api/chat."
                   rows={12}
                   className="min-h-[14rem] resize-y font-mono text-xs"
                 />
                 <p className="text-muted-foreground text-xs">
-                  Available placeholders: <code>{"{{today_date}}"}</code>,{" "}
+                  Placeholder keywords (for live replacement):{" "}
+                  <code>{"{{today_date}}"}</code>,{" "}
                   <code>{"{{timezone}}"}</code>, <code>{"{{doctor_info_json}}"}</code>,{" "}
                   <code>{"{{clinic_style_instructions}}"}</code>.
                 </p>

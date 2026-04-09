@@ -90,7 +90,6 @@ export function AudioChatTabs({ className }: { className?: string }) {
         const form = new FormData();
         form.append("file", file);
         if (apiKey.trim()) form.append("apiKey", apiKey.trim());
-        if (prompts.audioPrompt.trim()) form.append("prompt", prompts.audioPrompt.trim());
 
         const transcribeRes = await fetch("/api/audio/transcribe", {
           method: "POST",
@@ -118,7 +117,6 @@ export function AudioChatTabs({ className }: { className?: string }) {
             messages: [{ role: "user", content: transcript }],
             threadId: `audio-${jobId}`,
             apiKey: apiKey.trim() || undefined,
-            systemPrompt: prompts.chatSystem.trim() || undefined,
             schedulingPromptTemplate:
               prompts.schedulingPromptTemplate.trim() || undefined,
           }),
@@ -171,7 +169,6 @@ export function AudioChatTabs({ className }: { className?: string }) {
           messages: history.map(({ role, content }) => ({ role, content })),
           threadId: chatThreadId,
           apiKey: apiKey.trim() || undefined,
-          systemPrompt: prompts.chatSystem.trim() || undefined,
           schedulingPromptTemplate:
             prompts.schedulingPromptTemplate.trim() || undefined,
         }),
@@ -215,7 +212,6 @@ export function AudioChatTabs({ className }: { className?: string }) {
     messages,
     chatThreadId,
     apiKey,
-    prompts.chatSystem,
     prompts.schedulingPromptTemplate,
   ]);
 

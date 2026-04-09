@@ -6,7 +6,6 @@ export async function POST(request: Request) {
   try {
     const form = await request.formData();
     const file = form.get("file");
-    const prompt = form.get("prompt");
     const apiKeyRaw = form.get("apiKey");
 
     if (!(file instanceof File)) {
@@ -34,9 +33,6 @@ export async function POST(request: Request) {
       "model",
       process.env.OPENAI_AUDIO_MODEL?.trim() || DEFAULT_AUDIO_MODEL,
     );
-    if (typeof prompt === "string" && prompt.trim()) {
-      upstream.append("prompt", prompt.trim());
-    }
 
     const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
       method: "POST",
