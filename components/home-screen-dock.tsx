@@ -34,7 +34,7 @@ const dockItems = [
   },
   {
     title: "Profiles",
-    href: "#",
+    href: "/profiles",
     icon: (
       <IconUser className="h-full w-full text-neutral-500 dark:text-neutral-300" />
     ),
