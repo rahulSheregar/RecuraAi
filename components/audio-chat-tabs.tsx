@@ -11,6 +11,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 type ChatMessage = { id: string; role: "user" | "assistant"; content: string };
+type AudioStep = "queued" | "transcribing" | "responding" | "completed" | "failed";
+type AudioJob = {
+  id: string;
+  fileName: string;
+  fileSize: number;
+  step: AudioStep;
+  transcript?: string;
+  response?: string;
+  error?: string;
+};
 
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -24,8 +34,9 @@ const MAIN_PANEL_HEIGHT_CLASS = "h-[min(50vh,22rem)]";
 export function AudioChatTabs({ className }: { className?: string }) {
   const { apiKey, prompts } = useAiSettings();
   const fileInputRef = React.useRef<HTMLInputElement>(null);
-  const [audioFile, setAudioFile] = React.useState<File | null>(null);
-  const [audioUrl, setAudioUrl] = React.useState<string | null>(null);
+  const [audioFiles, setAudioFiles] = React.useState<File[]>([]);
+  const [audioJobs, setAudioJobs] = React.useState<AudioJob[]>([]);
+  const [isProcessingAudio, setIsProcessingAudio] = React.useState(false);
 
   const [messages, setMessages] = React.useState<ChatMessage[]>([]);
   const [chatThreadId, setChatThreadId] = React.useState(() => crypto.randomUUID());
@@ -34,32 +45,108 @@ export function AudioChatTabs({ className }: { className?: string }) {
   const scrollAnchorRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
-    if (!audioFile) {
-      setAudioUrl((prev) => {
-        if (prev) URL.revokeObjectURL(prev);
-        return null;
-      });
-      return;
-    }
-    const url = URL.createObjectURL(audioFile);
-    setAudioUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [audioFile]);
-
-  React.useEffect(() => {
     scrollAnchorRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isSending]);
 
   const onPickFile = () => fileInputRef.current?.click();
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) setAudioFile(file);
+    const files = e.target.files ? Array.from(e.target.files) : [];
+    if (files.length === 0) return;
+    setAudioFiles((prev) => [...prev, ...files]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const clearAudio = () => {
-    setAudioFile(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
+  const removeAudioAt = (idx: number) => {
+    setAudioFiles((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const processAudioFiles = async () => {
+    if (audioFiles.length === 0 || isProcessingAudio) return;
+    setIsProcessingAudio(true);
+    const filesToProcess = [...audioFiles];
+    setAudioFiles([]);
+
+    const updateJob = (jobId: string, patch: Partial<AudioJob>) => {
+      setAudioJobs((jobs) =>
+        jobs.map((j) => (j.id === jobId ? { ...j, ...patch } : j)),
+      );
+    };
+
+    const runOne = async (file: File) => {
+      const jobId = crypto.randomUUID();
+      setAudioJobs((jobs) => [
+        {
+          id: jobId,
+          fileName: file.name,
+          fileSize: file.size,
+          step: "queued",
+        },
+        ...jobs,
+      ]);
+
+      try {
+        updateJob(jobId, { step: "transcribing" });
+        const form = new FormData();
+        form.append("file", file);
+        if (apiKey.trim()) form.append("apiKey", apiKey.trim());
+        if (prompts.audioPrompt.trim()) form.append("prompt", prompts.audioPrompt.trim());
+
+        const transcribeRes = await fetch("/api/audio/transcribe", {
+          method: "POST",
+          body: form,
+        });
+        const transcribeData = (await transcribeRes.json()) as {
+          transcript?: string;
+          error?: string;
+        };
+        if (!transcribeRes.ok || !transcribeData.transcript) {
+          updateJob(jobId, {
+            step: "failed",
+            error: transcribeData.error ?? `Transcription failed (${transcribeRes.status}).`,
+          });
+          return;
+        }
+
+        const transcript = transcribeData.transcript.trim();
+        updateJob(jobId, { step: "responding", transcript });
+
+        const chatRes = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: [{ role: "user", content: transcript }],
+            threadId: `audio-${jobId}`,
+            apiKey: apiKey.trim() || undefined,
+            systemPrompt: prompts.chatSystem.trim() || undefined,
+            schedulingPromptTemplate:
+              prompts.schedulingPromptTemplate.trim() || undefined,
+          }),
+        });
+        const chatData = (await chatRes.json()) as { message?: string; error?: string };
+        if (!chatRes.ok) {
+          updateJob(jobId, {
+            step: "failed",
+            error: chatData.error ?? `AI response failed (${chatRes.status}).`,
+          });
+          return;
+        }
+
+        updateJob(jobId, {
+          step: "completed",
+          response: chatData.message ?? "(empty reply)",
+        });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Unexpected error.";
+        updateJob(jobId, { step: "failed", error: msg });
+      }
+    };
+
+    try {
+      await Promise.allSettled(filesToProcess.map((file) => runOne(file)));
+    } finally {
+      setIsProcessingAudio(false);
+    }
   };
 
   const sendMessage = React.useCallback(async () => {
@@ -137,6 +224,15 @@ export function AudioChatTabs({ className }: { className?: string }) {
     void sendMessage();
   };
 
+  const stepIndex = (step: AudioStep) =>
+    step === "queued"
+      ? 0
+      : step === "transcribing"
+        ? 1
+        : step === "responding"
+          ? 2
+          : 3;
+
   return (
     <div
       className={cn(
@@ -158,12 +254,14 @@ export function AudioChatTabs({ className }: { className?: string }) {
 
         <TabsContent value="audio" className="mt-0 flex flex-col gap-3">
           <p className="text-muted-foreground text-sm">
-            Upload an audio file to process or preview it locally.
+            Upload one or more audio files. Each file is transcribed and then processed
+            for scheduling response.
           </p>
           <input
             ref={fileInputRef}
             type="file"
             accept="audio/*"
+            multiple
             className="sr-only"
             onChange={onFileChange}
           />
@@ -173,46 +271,113 @@ export function AudioChatTabs({ className }: { className?: string }) {
               "overflow-hidden rounded-lg bg-muted/15",
             )}
           >
-            {!audioFile ? (
+            {audioFiles.length === 0 ? (
               <button
                 type="button"
                 onClick={onPickFile}
                 className="hover:border-primary/50 flex h-full w-full flex-col items-center justify-center gap-3 rounded-md border-2 border-dashed border-border/80 bg-muted/30 px-6 transition-colors"
               >
                 <Upload className="text-muted-foreground size-10" />
-                <span className="text-sm font-medium">Click to upload audio</span>
+                <span className="text-sm font-medium">Click to upload audio files</span>
                 <span className="text-muted-foreground text-xs">
-                  MP3, WAV, M4A, and other common formats
+                  MP3, WAV, M4A, and other common formats (multi-select supported)
                 </span>
               </button>
             ) : (
               <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="truncate font-medium">{audioFile.name}</p>
-                    <p className="text-muted-foreground text-xs">
-                      {formatBytes(audioFile.size)}
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={clearAudio}
-                    aria-label="Remove file"
+                {audioFiles.map((file, idx) => (
+                  <div
+                    key={`${file.name}-${file.size}-${idx}`}
+                    className="flex items-start justify-between gap-2 rounded-md border border-border bg-background/70 p-2"
                   >
-                    <X className="size-4" />
-                  </Button>
-                </div>
-                {audioUrl ? (
-                  <audio controls src={audioUrl} className="w-full shrink-0" />
-                ) : null}
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{file.name}</p>
+                      <p className="text-muted-foreground text-xs">{formatBytes(file.size)}</p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => removeAudioAt(idx)}
+                      aria-label={`Remove ${file.name}`}
+                      disabled={isProcessingAudio}
+                    >
+                      <X className="size-4" />
+                    </Button>
+                  </div>
+                ))}
               </div>
             )}
           </div>
-          <Button type="button" variant="outline" size="sm" onClick={onPickFile}>
-            {audioFile ? "Replace file" : "Choose file"}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={onPickFile}>
+              {audioFiles.length > 0 ? "Add more files" : "Choose files"}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => void processAudioFiles()}
+              disabled={isProcessingAudio || audioFiles.length === 0}
+            >
+              {isProcessingAudio
+                ? "Processing…"
+                : `Process ${audioFiles.length || ""} audio${audioFiles.length === 1 ? "" : "s"}`}
+            </Button>
+          </div>
+
+          {audioJobs.length > 0 ? (
+            <div className="space-y-3">
+              {audioJobs.map((job) => (
+                <div key={job.id} className="rounded-lg border border-border bg-background/70 p-3">
+                  <div className="mb-2">
+                    <p className="truncate font-medium">{job.fileName}</p>
+                    <p className="text-muted-foreground text-xs">{formatBytes(job.fileSize)}</p>
+                  </div>
+                  <ol className="mb-3 grid grid-cols-4 gap-2">
+                    {[
+                      { key: "queued", label: "Queued" },
+                      { key: "transcribing", label: "Transcribe" },
+                      { key: "responding", label: "Respond" },
+                      { key: "completed", label: job.step === "failed" ? "Failed" : "Done" },
+                    ].map((s, idx) => {
+                      const active = stepIndex(job.step) >= idx;
+                      const failed = job.step === "failed" && idx === 3;
+                      return (
+                        <li key={s.key} className="flex items-center gap-2 text-xs">
+                          <span
+                            className={cn(
+                              "flex size-5 items-center justify-center rounded-full border text-[11px] font-medium",
+                              active && "border-primary bg-primary text-primary-foreground",
+                              !active && "border-border text-muted-foreground",
+                              failed && "border-destructive bg-destructive text-destructive-foreground",
+                            )}
+                          >
+                            {idx + 1}
+                          </span>
+                          <span className={cn(!active && "text-muted-foreground")}>{s.label}</span>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                  {job.error ? (
+                    <p className="rounded bg-destructive/10 px-2 py-1 text-xs text-destructive">
+                      {job.error}
+                    </p>
+                  ) : null}
+                  {job.transcript ? (
+                    <p className="mt-2 text-xs">
+                      <span className="font-medium">Transcript:</span> {job.transcript}
+                    </p>
+                  ) : null}
+                  {job.response ? (
+                    <p className="mt-2 text-xs">
+                      <span className="font-medium">AI response:</span> {job.response}
+                    </p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : null}
         </TabsContent>
 
         <TabsContent value="chat" className="mt-0 flex flex-col gap-3">
