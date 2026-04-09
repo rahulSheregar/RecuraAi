@@ -15,6 +15,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -45,6 +46,8 @@ export function DoctorProfilesManager() {
   const [busy, setBusy] = React.useState(false);
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [draft, setDraft] = React.useState<DoctorProfile>(() => emptyProfile());
+  const [confirmDeleteId, setConfirmDeleteId] = React.useState<string | null>(null);
+  const [confirmSeedOpen, setConfirmSeedOpen] = React.useState(false);
 
   const refreshProfiles = React.useCallback(async () => {
     const res = await fetch("/api/doctors");
@@ -118,7 +121,6 @@ export function DoctorProfilesManager() {
   };
 
   const remove = async (id: string) => {
-    if (!window.confirm("Remove this doctor profile?")) return;
     setBusy(true);
     setActionError(null);
     try {
@@ -141,13 +143,6 @@ export function DoctorProfilesManager() {
   };
 
   const loadSampleScenario = async () => {
-    if (
-      !window.confirm(
-        "Replace all doctor profiles in the database with the built-in edge-case scenario (11 doctors)?",
-      )
-    ) {
-      return;
-    }
     setBusy(true);
     setActionError(null);
     try {
@@ -181,7 +176,7 @@ export function DoctorProfilesManager() {
         <Button
           type="button"
           variant="outline"
-          onClick={() => void loadSampleScenario()}
+          onClick={() => setConfirmSeedOpen(true)}
           disabled={busy}
           className="gap-1.5"
         >
@@ -244,7 +239,7 @@ export function DoctorProfilesManager() {
                         type="button"
                         variant="outline"
                         size="icon-sm"
-                        onClick={() => void remove(p.id)}
+                        onClick={() => setConfirmDeleteId(p.id)}
                         aria-label={`Delete ${p.name}`}
                         className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                       >
@@ -388,6 +383,77 @@ export function DoctorProfilesManager() {
               {draft.id ? "Save changes" : "Create profile"}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirmSeedOpen} onOpenChange={setConfirmSeedOpen}>
+        <DialogContent showCloseButton={!busy}>
+          <DialogHeader>
+            <DialogTitle>Load sample doctors?</DialogTitle>
+            <DialogDescription>
+              This replaces all doctor profiles in the SQLite database with the
+              built-in edge-case scenario.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setConfirmSeedOpen(false)}
+              disabled={busy}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                void loadSampleScenario();
+                setConfirmSeedOpen(false);
+              }}
+              disabled={busy}
+            >
+              Replace profiles
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={confirmDeleteId !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmDeleteId(null);
+        }}
+      >
+        <DialogContent showCloseButton={!busy}>
+          <DialogHeader>
+            <DialogTitle>Delete doctor profile?</DialogTitle>
+            <DialogDescription>
+              This action removes the selected doctor profile from the database.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setConfirmDeleteId(null)}
+              disabled={busy}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => {
+                if (!confirmDeleteId) return;
+                const id = confirmDeleteId;
+                setConfirmDeleteId(null);
+                void remove(id);
+              }}
+              disabled={busy}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

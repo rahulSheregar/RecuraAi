@@ -13,6 +13,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,15 +31,9 @@ export function SettingsView() {
   const [resetBusy, setResetBusy] = React.useState(false);
   const [resetMessage, setResetMessage] = React.useState<string | null>(null);
   const [resetError, setResetError] = React.useState<string | null>(null);
+  const [resetConfirmOpen, setResetConfirmOpen] = React.useState(false);
 
   const resetApplication = async () => {
-    if (
-      !window.confirm(
-        "Reset RecuraAi to its initial state? This deletes all rows in the SQLite database (doctors, workflow runs, appointments), clears your OpenAI key from this tab’s memory, and removes Recura data from browser storage (including custom prompts).",
-      )
-    ) {
-      return;
-    }
     setResetBusy(true);
     setResetMessage(null);
     setResetError(null);
@@ -156,7 +158,7 @@ export function SettingsView() {
           <Button
             type="button"
             variant="destructive"
-            onClick={() => void resetApplication()}
+            onClick={() => setResetConfirmOpen(true)}
             disabled={resetBusy}
           >
             {resetBusy ? "Resetting…" : "Reset to initial state"}
@@ -173,6 +175,40 @@ export function SettingsView() {
           ) : null}
         </CardContent>
       </Card>
+
+      <Dialog open={resetConfirmOpen} onOpenChange={setResetConfirmOpen}>
+        <DialogContent showCloseButton={!resetBusy}>
+          <DialogHeader>
+            <DialogTitle>Reset application data?</DialogTitle>
+            <DialogDescription>
+              This deletes all rows in the SQLite database (doctors, workflow runs,
+              appointments), clears your OpenAI key from memory, and removes Recura
+              keys from localStorage.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setResetConfirmOpen(false)}
+              disabled={resetBusy}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => {
+                void resetApplication();
+                setResetConfirmOpen(false);
+              }}
+              disabled={resetBusy}
+            >
+              Reset
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
