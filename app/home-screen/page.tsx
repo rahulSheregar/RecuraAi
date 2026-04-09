@@ -1,3 +1,5 @@
-export default function HomeScreen() {
-  return null;
+import { redirect } from "next/navigation";
+
+export default function HomeScreenLegacyRedirect() {
+  redirect("/");
 }
