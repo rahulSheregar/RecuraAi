@@ -128,3 +128,16 @@
     @apply font-sans;
   }
 }
+
+@layer utilities {
+  .home-dotted-bg {
+    background-color: var(--background);
+    background-image: radial-gradient(
+      circle,
+      color-mix(in oklch, var(--foreground) 12%, transparent) 1px,
+      transparent 1px
+    );
+    background-size: 1.5rem 1.5rem;
+    background-position: center top;
+  }
+}
