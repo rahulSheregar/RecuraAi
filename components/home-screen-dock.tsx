@@ -1,9 +1,9 @@
 "use client";
 
 import {
+  IconActivity,
   IconCalendar,
   IconHome,
-  IconMessageCircle,
   IconSettings,
   IconUser,
 } from "@tabler/icons-react";
@@ -19,10 +19,10 @@ const dockItems = [
     ),
   },
   {
-    title: "Chat",
+    title: "Status",
     href: "#",
     icon: (
-      <IconMessageCircle className="h-full w-full text-neutral-500 dark:text-neutral-300" />
+      <IconActivity className="h-full w-full text-neutral-500 dark:text-neutral-300" />
     ),
   },
   {
