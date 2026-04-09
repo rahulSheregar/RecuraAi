@@ -41,7 +41,7 @@ const dockItems = [
   },
   {
     title: "Settings",
-    href: "#",
+    href: "/settings",
     icon: (
       <IconSettings className="h-full w-full text-neutral-500 dark:text-neutral-300" />
     ),

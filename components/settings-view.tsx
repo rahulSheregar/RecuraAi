@@ -1,0 +1,117 @@
+"use client";
+
+import * as React from "react";
+
+import { useAiSettings } from "@/components/ai-settings-provider";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+
+export function SettingsView() {
+  const { apiKey, setApiKey, prompts, setPrompts, promptsHydrated } = useAiSettings();
+  const [showKey, setShowKey] = React.useState(false);
+
+  return (
+    <div className="flex flex-col gap-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>OpenAI API key</CardTitle>
+          <CardDescription className="space-y-2 text-pretty">
+            <span className="block">
+              Paste a key here to use it only in <strong>memory</strong> for this browser
+              tab: it is not saved to disk or localStorage. When you send a chat message,
+              it is sent to this app&apos;s server once, used to call OpenAI, and not
+              stored on the server.
+            </span>
+            <span className="block">
+              After a full page reload, this field is empty again. For a persistent setup,
+              set <code className="rounded bg-muted px-1 py-0.5 text-xs">OPENAI_API_KEY</code>{" "}
+              in <code className="rounded bg-muted px-1 py-0.5 text-xs">.env.local</code> on
+              the machine running Next.js — then you can leave this field blank.
+            </span>
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid gap-2">
+            <Label htmlFor="openai-key">API key (session memory)</Label>
+            <Input
+              id="openai-key"
+              type={showKey ? "text" : "password"}
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="sk-…"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              className="font-mono text-sm"
+            />
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowKey((s) => !s)}
+              >
+                {showKey ? "Hide" : "Show"} key
+              </Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setApiKey("")}>
+                Clear from memory
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Prompts</CardTitle>
+          <CardDescription>
+            Saved in this browser (localStorage). Used when calling the AI from chat and
+            reserved for future audio flows.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!promptsHydrated ? (
+            <p className="text-muted-foreground text-sm">Loading prompts…</p>
+          ) : (
+            <>
+              <div className="grid gap-2">
+                <Label htmlFor="prompt-chat">Chat — system prompt</Label>
+                <Textarea
+                  id="prompt-chat"
+                  value={prompts.chatSystem}
+                  onChange={(e) =>
+                    setPrompts((p) => ({ ...p, chatSystem: e.target.value }))
+                  }
+                  placeholder="Optional. Overrides default assistant behavior for the chat tab (e.g. tone, medical documentation style, brevity)."
+                  rows={5}
+                  className="min-h-[6rem] resize-y"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="prompt-audio">Audio — instructions</Label>
+                <Textarea
+                  id="prompt-audio"
+                  value={prompts.audioPrompt}
+                  onChange={(e) =>
+                    setPrompts((p) => ({ ...p, audioPrompt: e.target.value }))
+                  }
+                  placeholder="Optional. For future use when processing uploaded audio (e.g. how to summarize or transcribe)."
+                  rows={5}
+                  className="min-h-[6rem] resize-y"
+                />
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

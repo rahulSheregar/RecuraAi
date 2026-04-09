@@ -3,6 +3,7 @@
 import { Mic, MessageSquare, Send, Upload, X } from "lucide-react";
 import * as React from "react";
 
+import { useAiSettings } from "@/components/ai-settings-provider";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -17,15 +18,11 @@ function formatBytes(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-async function mockAssistantReply(userText: string): Promise<string> {
-  await new Promise((r) => setTimeout(r, 700));
-  return `This is a placeholder response. Wire your model or API here.\n\nYou wrote:\n“${userText.trim().slice(0, 500)}${userText.length > 500 ? "…" : ""}”`;
-}
-
 /** Shared height for the Audio upload area and Chat message list. */
 const MAIN_PANEL_HEIGHT_CLASS = "h-[min(50vh,22rem)]";
 
 export function AudioChatTabs({ className }: { className?: string }) {
+  const { apiKey, prompts } = useAiSettings();
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [audioFile, setAudioFile] = React.useState<File | null>(null);
   const [audioUrl, setAudioUrl] = React.useState<string | null>(null);
@@ -73,20 +70,55 @@ export function AudioChatTabs({ className }: { className?: string }) {
       role: "user",
       content: text,
     };
-    setMessages((m) => [...m, userMsg]);
+    const history = [...messages, userMsg];
+    setMessages(history);
     setInput("");
     setIsSending(true);
 
     try {
-      const reply = await mockAssistantReply(text);
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: history.map(({ role, content }) => ({ role, content })),
+          apiKey: apiKey.trim() || undefined,
+          systemPrompt: prompts.chatSystem.trim() || undefined,
+        }),
+      });
+      const data = (await res.json()) as { message?: string; error?: string };
+      if (!res.ok) {
+        setMessages((m) => [
+          ...m,
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: data.error || `Request failed (${res.status}).`,
+          },
+        ]);
+        return;
+      }
       setMessages((m) => [
         ...m,
-        { id: crypto.randomUUID(), role: "assistant", content: reply },
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: data.message || "(empty reply)",
+        },
+      ]);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Network error.";
+      setMessages((m) => [
+        ...m,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: `Error: ${msg}`,
+        },
       ]);
     } finally {
       setIsSending(false);
     }
-  }, [input, isSending]);
+  }, [input, isSending, messages, apiKey, prompts.chatSystem]);
 
   const onSubmitChat = (e: React.FormEvent) => {
     e.preventDefault();
