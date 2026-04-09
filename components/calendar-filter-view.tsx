@@ -6,6 +6,7 @@ import {
   addWeeks,
   addYears,
   eachDayOfInterval,
+  endOfDay,
   endOfMonth,
   endOfWeek,
   format,
@@ -28,6 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import type { CalendarEvent } from "@/lib/calendar-event-types";
 import { cn } from "@/lib/utils";
 
 export type CalendarViewMode = "day" | "week" | "month" | "year";
@@ -59,14 +61,22 @@ function chunkWeeks(days: Date[]): Date[][] {
   return weeks;
 }
 
+function eventIntersectsDay(event: CalendarEvent, day: Date): boolean {
+  const start = startOfDay(day).getTime();
+  const end = endOfDay(day).getTime();
+  return event.startsAt <= end && event.endsAt >= start;
+}
+
 function MonthGrid({
   anchorMonth,
   selected,
   onSelectDay,
+  events,
 }: {
   anchorMonth: Date;
   selected: Date | undefined;
   onSelectDay: (d: Date) => void;
+  events: CalendarEvent[];
 }) {
   const monthStart = startOfMonth(anchorMonth);
   const monthEnd = endOfMonth(anchorMonth);
@@ -96,6 +106,10 @@ function MonthGrid({
             const inMonth = isSameMonth(day, anchorMonth);
             const sel = selected && isSameDay(day, selected);
             const today = isToday(day);
+            const dayEvents = events
+              .filter((e) => eventIntersectsDay(e, day))
+              .sort((a, b) => a.startsAt - b.startsAt)
+              .slice(0, 3);
             return (
               <button
                 key={day.toISOString()}
@@ -122,6 +136,15 @@ function MonthGrid({
                 {/* Event list area — wire events here later */}
                 <div className="mt-1 flex min-h-[2.5rem] flex-1 flex-col gap-0.5 overflow-hidden text-left text-[10px] leading-tight text-muted-foreground sm:text-[11px]">
                   <span className="sr-only">Events for {format(day, "PPP")}</span>
+                  {dayEvents.map((event) => (
+                    <span
+                      key={event.id}
+                      className="truncate rounded bg-primary/10 px-1 py-0.5 text-primary"
+                      title={`${event.patientName} with ${event.doctorName}`}
+                    >
+                      {format(new Date(event.startsAt), "p")} {event.patientName}
+                    </span>
+                  ))}
                 </div>
               </button>
             );
@@ -132,16 +155,37 @@ function MonthGrid({
   );
 }
 
-function DayTimeline({ day }: { day: Date }) {
+function DayTimeline({ day, events }: { day: Date; events: CalendarEvent[] }) {
   const hours = React.useMemo(
     () => Array.from({ length: 24 }, (_, h) => h),
     [],
+  );
+  const dayEvents = React.useMemo(
+    () =>
+      events
+        .filter((e) => eventIntersectsDay(e, day))
+        .sort((a, b) => a.startsAt - b.startsAt),
+    [day, events],
   );
 
   return (
     <div className="w-full min-w-0 overflow-hidden rounded-lg border border-border">
       <div className="border-b border-border bg-muted/40 px-3 py-2 text-center text-sm font-medium">
         {format(day, "EEEE, MMMM d, yyyy")}
+      </div>
+      <div className="border-b border-border bg-background px-3 py-2">
+        {dayEvents.length === 0 ? (
+          <p className="text-muted-foreground text-xs">No appointments for this day.</p>
+        ) : (
+          <ul className="space-y-1">
+            {dayEvents.map((event) => (
+              <li key={event.id} className="text-xs">
+                <span className="font-medium">{format(new Date(event.startsAt), "p")}</span>{" "}
+                {event.patientName} with {event.doctorName}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
       <div className="max-h-[min(70vh,600px)] overflow-y-auto">
         {hours.map((h) => {
@@ -168,9 +212,11 @@ function DayTimeline({ day }: { day: Date }) {
 export function CalendarFilterView({
   className,
   initialDate,
+  events = [],
 }: {
   className?: string;
   initialDate?: Date;
+  events?: CalendarEvent[];
 }) {
   const [mode, setMode] = React.useState<CalendarViewMode>("month");
   const [anchor, setAnchor] = React.useState(() => startOfMonth(initialDate ?? new Date()));
@@ -295,6 +341,7 @@ export function CalendarFilterView({
         <MonthGrid
           anchorMonth={monthForGrid}
           selected={selected}
+          events={events}
           onSelectDay={(d) => {
             setSelected(d);
             setAnchor(startOfMonth(d));
@@ -303,7 +350,7 @@ export function CalendarFilterView({
       )}
 
       {mode === "day" && (
-        <DayTimeline day={startOfDay(anchor)} />
+        <DayTimeline day={startOfDay(anchor)} events={events} />
       )}
 
       {mode === "week" && (
@@ -312,6 +359,10 @@ export function CalendarFilterView({
             {weekDays.map((day) => {
               const sel = selected && isSameDay(day, selected);
               const today = isToday(day);
+              const dayEvents = events
+                .filter((e) => eventIntersectsDay(e, day))
+                .sort((a, b) => a.startsAt - b.startsAt)
+                .slice(0, 2);
               return (
                 <div
                   key={day.toISOString()}
@@ -335,7 +386,17 @@ export function CalendarFilterView({
                   >
                     {format(day, "d")}
                   </Button>
-                  <div className="mt-1 min-h-[3rem] flex-1 rounded-md border border-dashed border-border/60 bg-muted/20" />
+                  <div className="mt-1 min-h-[3rem] flex-1 rounded-md border border-dashed border-border/60 bg-muted/20 p-1">
+                    {dayEvents.map((event) => (
+                      <div
+                        key={event.id}
+                        className="truncate rounded bg-primary/10 px-1 py-0.5 text-[10px] text-primary"
+                        title={`${event.patientName} with ${event.doctorName}`}
+                      >
+                        {format(new Date(event.startsAt), "p")} {event.patientName}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               );
             })}

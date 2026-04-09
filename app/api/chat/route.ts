@@ -22,6 +22,26 @@ type IntentExtraction = {
 
 const DEFAULT_MODEL = "gpt-4o-mini";
 const SLOT_MINUTES = 30;
+const DUMMY_FIRST_NAMES = [
+  "Alex",
+  "Sam",
+  "Jordan",
+  "Taylor",
+  "Casey",
+  "Riley",
+  "Avery",
+  "Morgan",
+];
+const DUMMY_LAST_NAMES = [
+  "Parker",
+  "Reed",
+  "Shaw",
+  "Brooks",
+  "Hayes",
+  "Quinn",
+  "Cole",
+  "Rivera",
+];
 
 function safeJsonParse<T>(text: string): T | null {
   try {
@@ -175,6 +195,12 @@ function buildIntentPrompt(
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function randomPatientName(): string {
+  const first = DUMMY_FIRST_NAMES[Math.floor(Math.random() * DUMMY_FIRST_NAMES.length)];
+  const last = DUMMY_LAST_NAMES[Math.floor(Math.random() * DUMMY_LAST_NAMES.length)];
+  return `${first} ${last}`;
 }
 
 export async function POST(request: Request) {
@@ -388,6 +414,7 @@ export async function POST(request: Request) {
               isSlotOpenForDoctor(doctor, requestedStart, slotEnd) &&
               !hasConflict(futureAppointments, doctor.id, requestedStart, slotEnd)
             ) {
+              const patientName = randomPatientName();
               db.insert(appointmentStubs)
                 .values({
                   id: randomUUID(),
@@ -395,11 +422,15 @@ export async function POST(request: Request) {
                   doctorId: doctor.id,
                   startsAt: requestedStart.getTime(),
                   endsAt: slotEnd.getTime(),
-                  patientNote: latestUserMessage.content,
+                  patientNote: JSON.stringify({
+                    patientName,
+                    source: "chat",
+                    request: latestUserMessage.content,
+                  }),
                   createdAt: Date.now(),
                 })
                 .run();
-              reply = `Booked. Your appointment is scheduled for ${formatSlot(requestedStart, doctor.name)}.`;
+              reply = `Booked. ${patientName} is scheduled for ${formatSlot(requestedStart, doctor.name)}.`;
               outcome = "booked";
               booked = true;
               break;
