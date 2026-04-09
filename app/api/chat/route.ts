@@ -162,6 +162,7 @@ function buildIntentPrompt(
   timezone: string,
   doctors: DoctorProfile[],
   customSystemPrompt: string,
+  templateOverride: string | null,
 ): string {
   const doctorContext = doctors.map((d) => ({
     id: d.id,
@@ -174,34 +175,47 @@ function buildIntentPrompt(
       end: s.end,
     })),
   }));
-  return [
+  const defaultTemplate = [
     "You are an intent extractor for a dental clinic scheduler.",
-    `Today's date: ${today}. Timezone: ${timezone}.`,
+    "Today's date: {{today_date}}. Timezone: {{timezone}}.",
     "Use the doctor's live schedules below as your reference context.",
+    "",
     "Return JSON only with this schema:",
-    `{
-  "scope": "in_scope" | "out_of_scope" | "unclear",
-  "intent": "book" | "reschedule" | "cancel" | "question" | "other",
-  "confidence": number (0..1),
-  "doctorName": string | null,
-  "requestedDate": "YYYY-MM-DD" | null,
-  "requestedTime24h": "HH:mm" | null,
-  "requestedStartIso": ISO-8601 datetime | null,
-  "notes": string | null
-}`,
+    "{",
+    '  "scope": "in_scope" | "out_of_scope" | "unclear",',
+    '  "intent": "book" | "reschedule" | "cancel" | "question" | "other",',
+    '  "confidence": number (0..1),',
+    '  "doctorName": string | null,',
+    '  "requestedDate": "YYYY-MM-DD" | null,',
+    '  "requestedTime24h": "HH:mm" | null,',
+    '  "requestedStartIso": ISO-8601 datetime | null,',
+    '  "notes": string | null',
+    "}",
+    "",
     "Rules:",
     "- Out of scope means non-dental medical requests; mark scope=out_of_scope.",
     "- If user asks to book, set intent=book even if date/time is incomplete.",
     "- Prefer explicit date/time from the user; do not invent impossible details.",
     "- Keep notes short and factual.",
     "- Always provide confidence between 0 and 1.",
-    customSystemPrompt
-      ? `Clinic style instructions: ${customSystemPrompt}`
-      : "",
-    `Doctor schedules context: ${JSON.stringify(doctorContext)}`,
-  ]
-    .filter(Boolean)
-    .join("\n");
+    "{{clinic_style_instructions}}",
+    "",
+    "Doctor schedules context: {{doctor_info_json}}",
+  ].join("\n");
+
+  const template =
+    typeof templateOverride === "string" && templateOverride.trim()
+      ? templateOverride
+      : defaultTemplate;
+
+  return template
+    .replaceAll("{{today_date}}", today)
+    .replaceAll("{{timezone}}", timezone)
+    .replaceAll("{{doctor_info_json}}", JSON.stringify(doctorContext))
+    .replaceAll(
+      "{{clinic_style_instructions}}",
+      customSystemPrompt ? `Clinic style instructions: ${customSystemPrompt}` : "",
+    );
 }
 
 function randomPatientName(): string {
@@ -248,6 +262,7 @@ export async function POST(request: Request) {
       messages?: unknown;
       apiKey?: unknown;
       systemPrompt?: unknown;
+      schedulingPromptTemplate?: unknown;
       threadId?: unknown;
     };
 
@@ -338,6 +353,9 @@ export async function POST(request: Request) {
       timezone,
       doctors,
       typeof body.systemPrompt === "string" ? body.systemPrompt.trim() : "",
+      typeof body.schedulingPromptTemplate === "string"
+        ? body.schedulingPromptTemplate
+        : null,
     );
 
     const extractionRes = await fetch("https://api.openai.com/v1/chat/completions", {

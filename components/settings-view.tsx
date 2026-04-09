@@ -176,6 +176,29 @@ export function SettingsView() {
                   className="min-h-[6rem] resize-y"
                 />
               </div>
+              <div className="grid gap-2">
+                <Label htmlFor="prompt-scheduling-template">
+                  Scheduling — extraction prompt template
+                </Label>
+                <Textarea
+                  id="prompt-scheduling-template"
+                  value={prompts.schedulingPromptTemplate}
+                  onChange={(e) =>
+                    setPrompts((p) => ({
+                      ...p,
+                      schedulingPromptTemplate: e.target.value,
+                    }))
+                  }
+                  placeholder="Template used for AI extraction in /api/chat."
+                  rows={12}
+                  className="min-h-[14rem] resize-y font-mono text-xs"
+                />
+                <p className="text-muted-foreground text-xs">
+                  Available placeholders: <code>{"{{today_date}}"}</code>,{" "}
+                  <code>{"{{timezone}}"}</code>, <code>{"{{doctor_info_json}}"}</code>,{" "}
+                  <code>{"{{clinic_style_instructions}}"}</code>.
+                </p>
+              </div>
             </>
           )}
         </CardContent>

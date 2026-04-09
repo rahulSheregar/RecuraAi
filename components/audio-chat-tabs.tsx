@@ -85,6 +85,8 @@ export function AudioChatTabs({ className }: { className?: string }) {
           threadId: chatThreadId,
           apiKey: apiKey.trim() || undefined,
           systemPrompt: prompts.chatSystem.trim() || undefined,
+          schedulingPromptTemplate:
+            prompts.schedulingPromptTemplate.trim() || undefined,
         }),
       });
       const data = (await res.json()) as { message?: string; error?: string };
@@ -120,7 +122,15 @@ export function AudioChatTabs({ className }: { className?: string }) {
     } finally {
       setIsSending(false);
     }
-  }, [input, isSending, messages, chatThreadId, apiKey, prompts.chatSystem]);
+  }, [
+    input,
+    isSending,
+    messages,
+    chatThreadId,
+    apiKey,
+    prompts.chatSystem,
+    prompts.schedulingPromptTemplate,
+  ]);
 
   const onSubmitChat = (e: React.FormEvent) => {
     e.preventDefault();
