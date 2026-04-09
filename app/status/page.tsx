@@ -3,7 +3,7 @@ import { StatusRunsView } from "@/components/status-runs-view";
 import { listWorkflowRunStatus } from "@/lib/db/workflow-status";
 
 export default function StatusPage() {
-  const runs = listWorkflowRunStatus(50);
+  const threads = listWorkflowRunStatus(120);
 
   return (
     <div className="home-dotted-bg flex min-h-screen flex-col">
@@ -11,10 +11,11 @@ export default function StatusPage() {
         <header className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight">Workflow status</h1>
           <p className="text-muted-foreground text-sm text-pretty">
-            Complete run history with step-by-step input, AI decisions, and confidence.
+            Chat sessions group multiple messages. Expand a run and step to inspect input,
+            AI decisions, confidence, and execution timing.
           </p>
         </header>
-        <StatusRunsView runs={runs} />
+        <StatusRunsView threads={threads} />
       </main>
       <HomeScreenDock />
     </div>

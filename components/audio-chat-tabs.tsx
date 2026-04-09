@@ -28,6 +28,7 @@ export function AudioChatTabs({ className }: { className?: string }) {
   const [audioUrl, setAudioUrl] = React.useState<string | null>(null);
 
   const [messages, setMessages] = React.useState<ChatMessage[]>([]);
+  const [chatThreadId, setChatThreadId] = React.useState(() => crypto.randomUUID());
   const [input, setInput] = React.useState("");
   const [isSending, setIsSending] = React.useState(false);
   const scrollAnchorRef = React.useRef<HTMLDivElement>(null);
@@ -81,6 +82,7 @@ export function AudioChatTabs({ className }: { className?: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: history.map(({ role, content }) => ({ role, content })),
+          threadId: chatThreadId,
           apiKey: apiKey.trim() || undefined,
           systemPrompt: prompts.chatSystem.trim() || undefined,
         }),
@@ -118,7 +120,7 @@ export function AudioChatTabs({ className }: { className?: string }) {
     } finally {
       setIsSending(false);
     }
-  }, [input, isSending, messages, apiKey, prompts.chatSystem]);
+  }, [input, isSending, messages, chatThreadId, apiKey, prompts.chatSystem]);
 
   const onSubmitChat = (e: React.FormEvent) => {
     e.preventDefault();
@@ -204,6 +206,24 @@ export function AudioChatTabs({ className }: { className?: string }) {
         </TabsContent>
 
         <TabsContent value="chat" className="mt-0 flex flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-muted-foreground text-xs">
+              Session: <code>{chatThreadId.slice(0, 8)}</code>
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isSending}
+              onClick={() => {
+                setMessages([]);
+                setInput("");
+                setChatThreadId(crypto.randomUUID());
+              }}
+            >
+              New chat session
+            </Button>
+          </div>
           <ScrollArea
             className={cn(
               MAIN_PANEL_HEIGHT_CLASS,

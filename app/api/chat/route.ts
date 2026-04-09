@@ -248,6 +248,7 @@ export async function POST(request: Request) {
       messages?: unknown;
       apiKey?: unknown;
       systemPrompt?: unknown;
+      threadId?: unknown;
     };
 
     const apiKeyFromClient =
@@ -299,6 +300,11 @@ export async function POST(request: Request) {
     }
 
     const now = Date.now();
+    const threadId =
+      typeof body.threadId === "string" && body.threadId.trim()
+        ? body.threadId.trim()
+        : randomUUID();
+    const userMessageCount = chatHistory.filter((m) => m.role === "user").length;
     runId = randomUUID();
     db.insert(workflowRuns)
       .values({
@@ -307,7 +313,11 @@ export async function POST(request: Request) {
         status: "running",
         createdAt: now,
         updatedAt: now,
-        metadataJson: JSON.stringify({ latestUserMessage: latestUserMessage.content }),
+        metadataJson: JSON.stringify({
+          threadId,
+          userMessageCount,
+          latestUserMessage: latestUserMessage.content,
+        }),
       })
       .run();
 
@@ -507,7 +517,12 @@ export async function POST(request: Request) {
       .set({
         status: "completed",
         updatedAt: Date.now(),
-        metadataJson: JSON.stringify({ outcome }),
+        metadataJson: JSON.stringify({
+          threadId,
+          userMessageCount,
+          outcome,
+          latestUserMessage: latestUserMessage.content,
+        }),
       })
       .where(eq(workflowRuns.id, runId))
       .run();
@@ -516,7 +531,10 @@ export async function POST(request: Request) {
   } catch (e) {
     if (runId) {
       db.update(workflowRuns)
-        .set({ status: "failed", updatedAt: Date.now() })
+        .set({
+          status: "failed",
+          updatedAt: Date.now(),
+        })
         .where(eq(workflowRuns.id, runId))
         .run();
     }

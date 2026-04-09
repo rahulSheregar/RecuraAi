@@ -19,12 +19,21 @@ export type WorkflowStepStatusView = {
 
 export type WorkflowRunStatusView = {
   id: string;
+  threadId: string;
   source: string;
   status: string;
   createdAt: number;
   updatedAt: number;
   metadata: JsonRecord | null;
   steps: WorkflowStepStatusView[];
+  currentStep: string | null;
+};
+
+export type WorkflowThreadStatusView = {
+  threadId: string;
+  latestUpdatedAt: number;
+  runCount: number;
+  runs: WorkflowRunStatusView[];
 };
 
 function safeParseObject(raw: string | null): JsonRecord | null {
@@ -40,7 +49,7 @@ function safeParseObject(raw: string | null): JsonRecord | null {
   }
 }
 
-export function listWorkflowRunStatus(limit = 40): WorkflowRunStatusView[] {
+export function listWorkflowRunStatus(limit = 80): WorkflowThreadStatusView[] {
   const db = getDb();
   const runs = db
     .select()
@@ -49,7 +58,12 @@ export function listWorkflowRunStatus(limit = 40): WorkflowRunStatusView[] {
     .limit(limit)
     .all();
 
-  return runs.map((run) => {
+  const normalizedRuns: WorkflowRunStatusView[] = runs.map((run) => {
+    const metadata = safeParseObject(run.metadataJson);
+    const threadId =
+      typeof metadata?.threadId === "string" && metadata.threadId.trim()
+        ? metadata.threadId
+        : run.id;
     const steps = db
       .select()
       .from(workflowStepRuns)
@@ -67,15 +81,38 @@ export function listWorkflowRunStatus(limit = 40): WorkflowRunStatusView[] {
         input: safeParseObject(s.inputJson),
         output: safeParseObject(s.outputJson),
       }));
+    const running = steps.find((s) => s.status === "running");
+    const latest = steps[steps.length - 1];
 
     return {
       id: run.id,
+      threadId,
       source: run.source,
       status: run.status,
       createdAt: run.createdAt,
       updatedAt: run.updatedAt,
-      metadata: safeParseObject(run.metadataJson),
+      metadata,
       steps,
+      currentStep: running?.stepKey ?? latest?.stepKey ?? null,
     };
   });
+
+  const byThread = new Map<string, WorkflowThreadStatusView>();
+  for (const run of normalizedRuns) {
+    const existing = byThread.get(run.threadId);
+    if (!existing) {
+      byThread.set(run.threadId, {
+        threadId: run.threadId,
+        latestUpdatedAt: run.updatedAt,
+        runCount: 1,
+        runs: [run],
+      });
+      continue;
+    }
+    existing.runs.push(run);
+    existing.runCount += 1;
+    existing.latestUpdatedAt = Math.max(existing.latestUpdatedAt, run.updatedAt);
+  }
+
+  return [...byThread.values()].sort((a, b) => b.latestUpdatedAt - a.latestUpdatedAt);
 }
