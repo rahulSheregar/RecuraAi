@@ -10,7 +10,7 @@ import {
 } from "@/lib/ai-prompts-storage";
 
 type AiSettingsContextValue = {
-  /** Session only — never written to localStorage; cleared on full page reload. */
+  /** Session only (sessionStorage) — cleared when the browser session ends. */
   apiKey: string;
   setApiKey: (value: string) => void;
   prompts: AiPrompts;
@@ -21,6 +21,7 @@ type AiSettingsContextValue = {
 const AiSettingsContext = React.createContext<AiSettingsContextValue | null>(
   null,
 );
+const API_KEY_SESSION_STORAGE_KEY = "recura-openai-api-key-session-v1";
 
 export function AiSettingsProvider({ children }: { children: React.ReactNode }) {
   const [apiKey, setApiKey] = React.useState("");
@@ -28,8 +29,23 @@ export function AiSettingsProvider({ children }: { children: React.ReactNode }) 
   const [promptsHydrated, setPromptsHydrated] = React.useState(false);
 
   React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedKey = sessionStorage.getItem(API_KEY_SESSION_STORAGE_KEY) ?? "";
+      setApiKey(savedKey);
+    }
     setPromptsState(loadPrompts());
     setPromptsHydrated(true);
+  }, []);
+
+  const setApiKeyForSession = React.useCallback((value: string) => {
+    const next = value.trim();
+    setApiKey(next);
+    if (typeof window === "undefined") return;
+    if (next) {
+      sessionStorage.setItem(API_KEY_SESSION_STORAGE_KEY, next);
+    } else {
+      sessionStorage.removeItem(API_KEY_SESSION_STORAGE_KEY);
+    }
   }, []);
 
   const setPrompts = React.useCallback(
@@ -46,12 +62,12 @@ export function AiSettingsProvider({ children }: { children: React.ReactNode }) 
   const value = React.useMemo(
     () => ({
       apiKey,
-      setApiKey,
+      setApiKey: setApiKeyForSession,
       prompts,
       setPrompts,
       promptsHydrated,
     }),
-    [apiKey, prompts, setPrompts, promptsHydrated],
+    [apiKey, prompts, setApiKeyForSession, setPrompts, promptsHydrated],
   );
 
   return (

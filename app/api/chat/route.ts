@@ -219,7 +219,8 @@ export async function POST(request: Request) {
 
     const apiKeyFromClient =
       typeof body.apiKey === "string" ? body.apiKey.trim() : "";
-    const key = apiKeyFromClient || process.env.OPENAI_API_KEY?.trim() || "";
+    const envKey = process.env.OPENAI_API_KEY?.trim() || "";
+    const key = envKey || apiKeyFromClient;
 
     if (!key) {
       return NextResponse.json(

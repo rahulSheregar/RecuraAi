@@ -27,11 +27,17 @@ import { Textarea } from "@/components/ui/textarea";
 
 export function SettingsView() {
   const { apiKey, setApiKey, prompts, setPrompts, promptsHydrated } = useAiSettings();
+  const [draftApiKey, setDraftApiKey] = React.useState(apiKey);
   const [showKey, setShowKey] = React.useState(false);
+  const [keySavedMessage, setKeySavedMessage] = React.useState<string | null>(null);
   const [resetBusy, setResetBusy] = React.useState(false);
   const [resetMessage, setResetMessage] = React.useState<string | null>(null);
   const [resetError, setResetError] = React.useState<string | null>(null);
   const [resetConfirmOpen, setResetConfirmOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    setDraftApiKey(apiKey);
+  }, [apiKey]);
 
   const resetApplication = async () => {
     setResetBusy(true);
@@ -60,13 +66,14 @@ export function SettingsView() {
           <CardTitle>OpenAI API key</CardTitle>
           <CardDescription className="space-y-2 text-pretty">
             <span className="block">
-              Paste a key here to use it only in <strong>memory</strong> for this browser
-              tab: it is not saved to disk or localStorage. When you send a chat message,
-              it is sent to this app&apos;s server once, used to call OpenAI, and not
-              stored on the server.
+              Paste a key here and save it for this <strong>browser session</strong>.
+              It is kept in session storage (not localStorage or disk). When you send a
+              chat message, it is sent to this app&apos;s server once, used to call
+              OpenAI, and not stored on the server.
             </span>
             <span className="block">
-              After a full page reload, this field is empty again. For a persistent setup,
+              It remains available after reload while the browser session is active, and
+              is cleared when the browser session ends. For a persistent setup,
               set <code className="rounded bg-muted px-1 py-0.5 text-xs">OPENAI_API_KEY</code>{" "}
               in <code className="rounded bg-muted px-1 py-0.5 text-xs">.env.local</code> on
               the machine running Next.js — then you can leave this field blank.
@@ -75,15 +82,18 @@ export function SettingsView() {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="grid gap-2">
-            <Label htmlFor="openai-key">API key (session memory)</Label>
+            <Label htmlFor="openai-key">API key (session only)</Label>
             <Input
               id="openai-key"
               type={showKey ? "text" : "password"}
               autoComplete="off"
               spellCheck={false}
               placeholder="sk-…"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
+              value={draftApiKey}
+              onChange={(e) => {
+                setDraftApiKey(e.target.value);
+                setKeySavedMessage(null);
+              }}
               className="font-mono text-sm"
             />
             <div className="flex flex-wrap gap-2">
@@ -95,10 +105,34 @@ export function SettingsView() {
               >
                 {showKey ? "Hide" : "Show"} key
               </Button>
-              <Button type="button" variant="ghost" size="sm" onClick={() => setApiKey("")}>
-                Clear from memory
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => {
+                  setApiKey(draftApiKey.trim());
+                  setKeySavedMessage("API key saved for this browser session.");
+                }}
+              >
+                Save key
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setDraftApiKey("");
+                  setApiKey("");
+                  setKeySavedMessage("Cleared from this browser session.");
+                }}
+              >
+                Clear key
               </Button>
             </div>
+            {keySavedMessage ? (
+              <p className="text-muted-foreground text-xs" role="status">
+                {keySavedMessage}
+              </p>
+            ) : null}
           </div>
         </CardContent>
       </Card>
