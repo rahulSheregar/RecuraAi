@@ -87,8 +87,10 @@ export function AudioChatTabs({ className }: { className?: string }) {
 
       try {
         updateJob(jobId, { step: "transcribing" });
+        const threadId = `audio-${jobId}`;
         const form = new FormData();
         form.append("file", file);
+        form.append("threadId", threadId);
         if (apiKey.trim()) form.append("apiKey", apiKey.trim());
 
         const transcribeRes = await fetch("/api/audio/transcribe", {
@@ -97,12 +99,18 @@ export function AudioChatTabs({ className }: { className?: string }) {
         });
         const transcribeData = (await transcribeRes.json()) as {
           transcript?: string;
+          runId?: string;
+          threadId?: string;
           error?: string;
         };
-        if (!transcribeRes.ok || !transcribeData.transcript) {
+        if (!transcribeRes.ok || !transcribeData.transcript || !transcribeData.runId) {
           updateJob(jobId, {
             step: "failed",
-            error: transcribeData.error ?? `Transcription failed (${transcribeRes.status}).`,
+            error:
+              transcribeData.error ??
+              (!transcribeData.runId
+                ? "Transcription did not return a workflow run id."
+                : `Transcription failed (${transcribeRes.status}).`),
           });
           return;
         }
@@ -115,7 +123,8 @@ export function AudioChatTabs({ className }: { className?: string }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             messages: [{ role: "user", content: transcript }],
-            threadId: `audio-${jobId}`,
+            threadId: transcribeData.threadId ?? threadId,
+            existingRunId: transcribeData.runId,
             apiKey: apiKey.trim() || undefined,
             schedulingPromptTemplate:
               prompts.schedulingPromptTemplate.trim() || undefined,

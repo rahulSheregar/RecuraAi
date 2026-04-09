@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { eq, gte } from "drizzle-orm";
+import { eq, gte, max } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { listDoctorProfiles } from "@/lib/db/doctors";
@@ -43,6 +43,19 @@ const DUMMY_LAST_NAMES = [
   "Cole",
   "Rivera",
 ];
+
+function parseRunMetadata(raw: string | null): Record<string, unknown> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    /* ignore */
+  }
+  return {};
+}
 
 function safeJsonParse<T>(text: string): T | null {
   try {
@@ -259,6 +272,7 @@ export async function POST(request: Request) {
       apiKey?: unknown;
       schedulingPromptTemplate?: unknown;
       threadId?: unknown;
+      existingRunId?: unknown;
     };
 
     const apiKeyFromClient =
@@ -310,26 +324,66 @@ export async function POST(request: Request) {
     }
 
     const now = Date.now();
-    const threadId =
+    const existingRunId =
+      typeof body.existingRunId === "string" && body.existingRunId.trim()
+        ? body.existingRunId.trim()
+        : null;
+
+    let threadId =
       typeof body.threadId === "string" && body.threadId.trim()
         ? body.threadId.trim()
         : randomUUID();
     const userMessageCount = chatHistory.filter((m) => m.role === "user").length;
-    runId = randomUUID();
-    db.insert(workflowRuns)
-      .values({
-        id: runId,
-        source: "chat",
-        status: "running",
-        createdAt: now,
-        updatedAt: now,
-        metadataJson: JSON.stringify({
-          threadId,
-          userMessageCount,
-          latestUserMessage: latestUserMessage.content,
-        }),
-      })
-      .run();
+
+    if (existingRunId) {
+      const existing = db
+        .select()
+        .from(workflowRuns)
+        .where(eq(workflowRuns.id, existingRunId))
+        .get();
+      if (!existing) {
+        return NextResponse.json({ error: "Workflow run not found." }, { status: 404 });
+      }
+      if (existing.source !== "voice") {
+        return NextResponse.json(
+          { error: "This run cannot be continued from chat." },
+          { status: 400 },
+        );
+      }
+      if (existing.status !== "running") {
+        return NextResponse.json(
+          { error: "Workflow run is not active." },
+          { status: 400 },
+        );
+      }
+      runId = existingRunId;
+      const prevMeta = parseRunMetadata(existing.metadataJson);
+      if (typeof prevMeta.threadId === "string" && prevMeta.threadId.trim()) {
+        threadId = prevMeta.threadId.trim();
+      }
+      const maxRow = db
+        .select({ maxIdx: max(workflowStepRuns.orderIndex) })
+        .from(workflowStepRuns)
+        .where(eq(workflowStepRuns.runId, existingRunId))
+        .get();
+      stepOrder = (maxRow?.maxIdx ?? -1) + 1;
+    } else {
+      runId = randomUUID();
+      db.insert(workflowRuns)
+        .values({
+          id: runId,
+          source: "chat",
+          status: "running",
+          createdAt: now,
+          updatedAt: now,
+          metadataJson: JSON.stringify({
+            threadId,
+            userMessageCount,
+            latestUserMessage: latestUserMessage.content,
+          }),
+        })
+        .run();
+    }
 
     const doctors = listDoctorProfiles();
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -525,11 +579,15 @@ export async function POST(request: Request) {
       confidence: Number(decisionConfidence.toFixed(2)),
       reply,
     });
+
+    const runRow = db.select().from(workflowRuns).where(eq(workflowRuns.id, runId)).get();
+    const baseMeta = runRow ? parseRunMetadata(runRow.metadataJson) : {};
     db.update(workflowRuns)
       .set({
         status: "completed",
         updatedAt: Date.now(),
         metadataJson: JSON.stringify({
+          ...baseMeta,
           threadId,
           userMessageCount,
           outcome,
