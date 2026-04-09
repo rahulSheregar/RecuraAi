@@ -13,6 +13,7 @@ type ChatMessage = { role: "user" | "assistant" | "system"; content: string };
 type IntentExtraction = {
   scope: "in_scope" | "out_of_scope" | "unclear";
   intent: "book" | "reschedule" | "cancel" | "question" | "other";
+  confidence: number | null;
   doctorName: string | null;
   requestedDate: string | null;
   requestedTime24h: string | null;
@@ -107,6 +108,10 @@ function normalizeIntent(raw: unknown): IntentExtraction {
   return {
     scope,
     intent,
+    confidence:
+      typeof o.confidence === "number" && !Number.isNaN(o.confidence)
+        ? Math.max(0, Math.min(1, o.confidence))
+        : null,
     doctorName: typeof o.doctorName === "string" && o.doctorName.trim() ? o.doctorName.trim() : null,
     requestedDate:
       typeof o.requestedDate === "string" && o.requestedDate.trim() ? o.requestedDate.trim() : null,
@@ -177,6 +182,7 @@ function buildIntentPrompt(
     `{
   "scope": "in_scope" | "out_of_scope" | "unclear",
   "intent": "book" | "reschedule" | "cancel" | "question" | "other",
+  "confidence": number (0..1),
   "doctorName": string | null,
   "requestedDate": "YYYY-MM-DD" | null,
   "requestedTime24h": "HH:mm" | null,
@@ -188,6 +194,7 @@ function buildIntentPrompt(
     "- If user asks to book, set intent=book even if date/time is incomplete.",
     "- Prefer explicit date/time from the user; do not invent impossible details.",
     "- Keep notes short and factual.",
+    "- Always provide confidence between 0 and 1.",
     customSystemPrompt
       ? `Clinic style instructions: ${customSystemPrompt}`
       : "",
@@ -373,19 +380,24 @@ export async function POST(request: Request) {
 
     let reply = "";
     let outcome = "replied";
+    let decisionConfidence =
+      intent.confidence !== null ? Math.max(0.2, Math.min(0.95, intent.confidence)) : 0.6;
 
     if (intent.scope === "out_of_scope") {
       reply =
         "I can only help with dental appointment scheduling and related dental questions. If this is urgent or non-dental, please contact the appropriate clinician.";
       outcome = "declined_off_topic";
+      decisionConfidence = Math.max(decisionConfidence, 0.85);
     } else if (doctors.length === 0) {
       reply =
         "I can help schedule, but there are no doctor profiles set up yet. Please add doctors in Profiles first.";
       outcome = "no_doctors_configured";
+      decisionConfidence = Math.max(decisionConfidence, 0.95);
     } else if (intent.intent !== "book" && intent.intent !== "reschedule") {
       reply =
         "I can help book dental appointments. Please share your preferred doctor, date, and time (for example: Dr. Alex Kim next Monday at 10:30 AM).";
       outcome = "needs_scheduling_details";
+      decisionConfidence = Math.max(decisionConfidence, 0.75);
     } else {
       const candidateDoctors = intent.doctorName
         ? findDoctorsByName(doctors, intent.doctorName)
@@ -395,6 +407,7 @@ export async function POST(request: Request) {
         const names = doctors.map((d) => d.name).join(", ");
         reply = `I could not find that doctor. Available doctors are: ${names}. Which one should I book with?`;
         outcome = "doctor_not_found";
+        decisionConfidence = Math.max(decisionConfidence, 0.85);
       } else {
         let requestedStart: Date | null = null;
         if (intent.requestedStartIso) {
@@ -432,6 +445,7 @@ export async function POST(request: Request) {
                 .run();
               reply = `Booked. ${patientName} is scheduled for ${formatSlot(requestedStart, doctor.name)}.`;
               outcome = "booked";
+              decisionConfidence = Math.max(decisionConfidence, 0.9);
               booked = true;
               break;
             }
@@ -473,16 +487,22 @@ export async function POST(request: Request) {
               .join("\n");
             reply = `That specific slot is not available. Here are the next available options:\n${lines}\n\nReply with the option number you'd like.`;
             outcome = "offered_alternatives";
+            decisionConfidence = Math.max(decisionConfidence, 0.8);
           } else {
             reply =
               "I could not find an open slot in the next few weeks for that request. Please share another date range or preferred doctor.";
             outcome = "no_availability";
+            decisionConfidence = Math.max(decisionConfidence, 0.75);
           }
         }
       }
     }
 
-    finishStep(decisionStepId, "succeeded", { outcome, reply });
+    finishStep(decisionStepId, "succeeded", {
+      outcome,
+      confidence: Number(decisionConfidence.toFixed(2)),
+      reply,
+    });
     db.update(workflowRuns)
       .set({
         status: "completed",

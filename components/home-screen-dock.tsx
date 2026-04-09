@@ -20,7 +20,7 @@ const dockItems = [
   },
   {
     title: "Status",
-    href: "#",
+    href: "/status",
     icon: (
       <IconHeartbeat className="h-full w-full text-neutral-500 dark:text-neutral-300" />
     ),
