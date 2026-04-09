@@ -27,7 +27,7 @@ const dockItems = [
   },
   {
     title: "Calendar",
-    href: "#",
+    href: "/calendar",
     icon: (
       <IconCalendar className="h-full w-full text-neutral-500 dark:text-neutral-300" />
     ),
