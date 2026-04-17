@@ -61,18 +61,20 @@ export async function executeChatSchedulingWorkflow(
             .where(eq(emailTemplate.id, tmplId))
             .get();
           if (tmpl) {
-            sendEmail(tmpl.subject, tmpl.content, {
+            // Do not await: keep step persistence synchronous; failures are non-fatal.
+            void sendEmail(tmpl.subject, tmpl.content, {
               runId: row?.runId ?? null,
               stepId: id,
               templateId: tmplId,
-            });
+            }).catch(() => {});
             return;
           }
         }
-        // Fallback: send a generic alert if no template found.
         const subject = `Workflow step failed: ${row?.stepKey ?? id}`;
         const content = `A workflow step failed.\n\nrunId: ${row?.runId ?? "unknown"}\nstepId: ${id}\nstepKey: ${row?.stepKey ?? "unknown"}\nerror: ${row?.errorMessage ?? error ?? "unknown"}\n\nOutput: ${row?.outputJson ?? JSON.stringify(output)}`;
-        sendEmail(subject, content, { runId: row?.runId ?? null, stepId: id });
+        void sendEmail(subject, content, { runId: row?.runId ?? null, stepId: id }).catch(
+          () => {},
+        );
       } catch {
         // ignore email failures
       }

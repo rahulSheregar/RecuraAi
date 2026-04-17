@@ -142,10 +142,9 @@ export async function POST(request: Request) {
         .run();
     }
 
-    
-
-    // Before running the full workflow, run a quick intent extraction so we can
-    // notify via email if the intent is negative (out_of_scope) using the provided template.
+    // Pre-flight intent check (same model path as the workflow’s extract_intent step):
+    // if the model marks the message as out of scope, notify NOTIFY_EMAIL via Resend
+    // before continuing. The main workflow still runs afterward.
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
     const openaiModel = process.env.OPENAI_MODEL?.trim() || DEFAULT_CHAT_MODEL;
     const schedulingPromptTemplate =
@@ -175,21 +174,48 @@ export async function POST(request: Request) {
         extractionPrompt,
         chatHistoryTail,
       });
-      if (fetched.ok) {
-        const intent = fetched.intent;
-        if (intent.scope === "out_of_scope" && templateId) {
-          try {
-            const tmpl = db.select().from(emailTemplate).where(eq(emailTemplate.id, templateId)).get();
+      if (fetched.ok && fetched.intent.scope === "out_of_scope") {
+        try {
+          // Prefer the stored email_template row when the client passed templateId.
+          if (templateId) {
+            const tmpl = db
+              .select()
+              .from(emailTemplate)
+              .where(eq(emailTemplate.id, templateId))
+              .get();
             if (tmpl) {
-              sendEmail(tmpl.subject, tmpl.content, {
+              await sendEmail(tmpl.subject, tmpl.content, {
                 runId,
                 templateId,
                 reason: "intent_out_of_scope",
               });
+            } else {
+              await sendEmail(
+                "Out-of-scope scheduling request",
+                [
+                  "OpenAI classified the user message as out of scope for scheduling.",
+                  "",
+                  `Run id: ${runId}`,
+                  `Requested template id: ${templateId} (not found in database)`,
+                  `Latest user message: ${latestUserMessage.content}`,
+                ].join("\n"),
+                { runId, templateId, reason: "intent_out_of_scope" },
+              );
             }
-          } catch {
-            // ignore email/template lookup errors
+          } else {
+            await sendEmail(
+              "Out-of-scope scheduling request",
+              [
+                "OpenAI classified the user message as out of scope for scheduling.",
+                "",
+                `Run id: ${runId}`,
+                `Latest user message: ${latestUserMessage.content}`,
+              ].join("\n"),
+              { runId, reason: "intent_out_of_scope" },
+            );
           }
+        } catch {
+          // ignore email/template lookup errors
         }
       }
     } catch {
