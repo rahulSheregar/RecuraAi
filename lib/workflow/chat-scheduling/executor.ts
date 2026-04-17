@@ -11,6 +11,15 @@ import { computeSchedulingDecision } from "./scheduling";
 import type { ChatExecutorErr, ChatExecutorInput, ChatExecutorOk } from "./types";
 import { sendEmail } from "@/lib/email-service/email-service";
 
+function appendTranscriptToEmailBody(
+  body: string,
+  transcript: string | null | undefined,
+): string {
+  const t = transcript?.trim();
+  if (!t) return body;
+  return `${body}\n\n---\nTranscript\n${t}`;
+}
+
 export async function executeChatSchedulingWorkflow(
   input: ChatExecutorInput,
 ): Promise<ChatExecutorOk | ChatExecutorErr> {
@@ -62,16 +71,23 @@ export async function executeChatSchedulingWorkflow(
             .get();
           if (tmpl) {
             // Do not await: keep step persistence synchronous; failures are non-fatal.
-            void sendEmail(tmpl.subject, tmpl.content, {
-              runId: row?.runId ?? null,
-              stepId: id,
-              templateId: tmplId,
-            }).catch(() => {});
+            void sendEmail(
+              tmpl.subject,
+              appendTranscriptToEmailBody(tmpl.content, input.emailTranscript),
+              {
+                runId: row?.runId ?? null,
+                stepId: id,
+                templateId: tmplId,
+              },
+            ).catch(() => {});
             return;
           }
         }
         const subject = `Workflow step failed: ${row?.stepKey ?? id}`;
-        const content = `A workflow step failed.\n\nrunId: ${row?.runId ?? "unknown"}\nstepId: ${id}\nstepKey: ${row?.stepKey ?? "unknown"}\nerror: ${row?.errorMessage ?? error ?? "unknown"}\n\nOutput: ${row?.outputJson ?? JSON.stringify(output)}`;
+        const content = appendTranscriptToEmailBody(
+          `A workflow step failed.\n\nrunId: ${row?.runId ?? "unknown"}\nstepId: ${id}\nstepKey: ${row?.stepKey ?? "unknown"}\nerror: ${row?.errorMessage ?? error ?? "unknown"}\n\nOutput: ${row?.outputJson ?? JSON.stringify(output)}`,
+          input.emailTranscript,
+        );
         void sendEmail(subject, content, { runId: row?.runId ?? null, stepId: id }).catch(
           () => {},
         );

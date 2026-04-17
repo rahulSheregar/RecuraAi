@@ -32,6 +32,8 @@ export type ChatExecutorInput = {
   schedulingPromptTemplate: string | null;
   /** optional email/template id to associate with step runs */
   templateId?: string | null;
+  /** optional transcript (e.g. voice) appended to notification email bodies */
+  emailTranscript?: string | null;
   timezone: string;
 };
 

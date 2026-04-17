@@ -17,6 +17,12 @@ import {
 import { listDoctorProfiles } from "@/lib/db/doctors";
 import { sendEmail } from "@/lib/email-service/email-service";
 
+function appendTranscriptToEmailBody(body: string, transcript: string | null): string {
+  const t = transcript?.trim();
+  if (!t) return body;
+  return `${body}\n\n---\nTranscript\n${t}`;
+}
+
 export async function POST(request: Request) {
   const db = getDb();
   let runId: string | null = null;
@@ -29,6 +35,8 @@ export async function POST(request: Request) {
       threadId?: unknown;
       existingRunId?: unknown;
       templateId?: unknown;
+      /** Voice or other client-supplied text to append to out-of-scope notification emails */
+      emailTranscript?: unknown;
     };
 
     const apiKeyFromClient =
@@ -155,6 +163,10 @@ export async function POST(request: Request) {
       typeof body.templateId === "string" && body.templateId.trim()
         ? body.templateId.trim()
         : null;
+    const emailTranscript =
+      typeof body.emailTranscript === "string" && body.emailTranscript.trim()
+        ? body.emailTranscript.trim()
+        : null;
 
     try {
       const doctors = listDoctorProfiles();
@@ -184,33 +196,43 @@ export async function POST(request: Request) {
               .where(eq(emailTemplate.id, templateId))
               .get();
             if (tmpl) {
-              await sendEmail(tmpl.subject, tmpl.content, {
-                runId,
-                templateId,
-                reason: "intent_out_of_scope",
-              });
+              await sendEmail(
+                tmpl.subject,
+                appendTranscriptToEmailBody(tmpl.content, emailTranscript),
+                {
+                  runId,
+                  templateId,
+                  reason: "intent_out_of_scope",
+                },
+              );
             } else {
               await sendEmail(
                 "Out-of-scope scheduling request",
-                [
-                  "OpenAI classified the user message as out of scope for scheduling.",
-                  "",
-                  `Run id: ${runId}`,
-                  `Requested template id: ${templateId} (not found in database)`,
-                  `Latest user message: ${latestUserMessage.content}`,
-                ].join("\n"),
+                appendTranscriptToEmailBody(
+                  [
+                    "OpenAI classified the user message as out of scope for scheduling.",
+                    "",
+                    `Run id: ${runId}`,
+                    `Requested template id: ${templateId} (not found in database)`,
+                    `Latest user message: ${latestUserMessage.content}`,
+                  ].join("\n"),
+                  emailTranscript,
+                ),
                 { runId, templateId, reason: "intent_out_of_scope" },
               );
             }
           } else {
             await sendEmail(
               "Out-of-scope scheduling request",
-              [
-                "OpenAI classified the user message as out of scope for scheduling.",
-                "",
-                `Run id: ${runId}`,
-                `Latest user message: ${latestUserMessage.content}`,
-              ].join("\n"),
+              appendTranscriptToEmailBody(
+                [
+                  "OpenAI classified the user message as out of scope for scheduling.",
+                  "",
+                  `Run id: ${runId}`,
+                  `Latest user message: ${latestUserMessage.content}`,
+                ].join("\n"),
+                emailTranscript,
+              ),
               { runId, reason: "intent_out_of_scope" },
             );
           }
@@ -234,6 +256,7 @@ export async function POST(request: Request) {
       openaiModel,
       schedulingPromptTemplate,
       templateId,
+      emailTranscript,
       timezone,
     });
 

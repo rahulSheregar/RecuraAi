@@ -230,6 +230,7 @@ export function AudioChatTabs({ className }: { className?: string }) {
             schedulingPromptTemplate:
               prompts.schedulingPromptTemplate.trim() || undefined,
             templateId: selectedTemplateId || undefined,
+            emailTranscript: transcript,
           }),
         });
         const chatData = (await chatRes.json()) as { message?: string; error?: string };
@@ -325,6 +326,7 @@ export function AudioChatTabs({ className }: { className?: string }) {
     chatThreadId,
     apiKey,
     prompts.schedulingPromptTemplate,
+    selectedTemplateId,
   ]);
 
   const onSubmitChat = (e: React.FormEvent) => {
@@ -365,6 +367,26 @@ export function AudioChatTabs({ className }: { className?: string }) {
             Drag and drop audio files here or use the buttons below. Each file is transcribed
             and then processed for a scheduling response.
           </p>
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <span className="text-muted-foreground text-xs">
+              Template (optional) — used for workflow linkage and out-of-scope alert emails.
+            </span>
+            <Select
+              value={selectedTemplateId ?? ""}
+              onValueChange={(v) => setSelectedTemplateId(v || null)}
+            >
+              <SelectTrigger className="w-[min(100%,14rem)]" size="sm">
+                <SelectValue placeholder="Insert template" />
+              </SelectTrigger>
+              <SelectContent>
+                {templates.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.subject}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <input
             ref={fileInputRef}
             type="file"
