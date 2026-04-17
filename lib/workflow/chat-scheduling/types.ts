@@ -30,6 +30,8 @@ export type ChatExecutorInput = {
   openaiKey: string;
   openaiModel: string;
   schedulingPromptTemplate: string | null;
+  /** optional email/template id to associate with step runs */
+  templateId?: string | null;
   timezone: string;
 };
 

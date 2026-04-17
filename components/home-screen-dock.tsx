@@ -48,6 +48,13 @@ const dockItems = [
     ),
   },
   {
+    title: "Template",
+    href: "/template",
+    icon: (
+      <IconTestPipe className="h-full w-full text-neutral-500 dark:text-neutral-300" />
+    ),
+  },
+  {
     title: "Settings",
     href: "/settings",
     icon: (

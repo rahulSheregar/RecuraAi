@@ -15,6 +15,20 @@
       "when": 1775717519212,
       "tag": "0001_doctor_profiles",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1776462496804,
+      "tag": "0002_talented_anita_blake",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1776463290445,
+      "tag": "0003_striped_misty_knight",
+      "breakpoints": true
     }
   ]
 }

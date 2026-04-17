@@ -3,12 +3,13 @@ import { randomUUID } from "node:crypto";
 import { eq, gte } from "drizzle-orm";
 
 import { listDoctorProfiles } from "@/lib/db/doctors";
-import { appointmentStubs, workflowRuns, workflowStepRuns } from "@/lib/db/schema";
+import { appointmentStubs, workflowRuns, workflowStepRuns, emailTemplate } from "@/lib/db/schema";
 
 import { buildIntentPrompt, fetchIntentFromOpenAI, isoToday } from "./intent";
 import { parseRunMetadata } from "./metadata";
 import { computeSchedulingDecision } from "./scheduling";
 import type { ChatExecutorErr, ChatExecutorInput, ChatExecutorOk } from "./types";
+import { sendEmail } from "@/lib/email-service/email-service";
 
 export async function executeChatSchedulingWorkflow(
   input: ChatExecutorInput,
@@ -22,6 +23,7 @@ export async function executeChatSchedulingWorkflow(
       .values({
         id,
         runId: input.runId,
+        templateId: input.templateId ?? null,
         stepKey,
         status: "running",
         orderIndex: stepOrder++,
@@ -42,6 +44,39 @@ export async function executeChatSchedulingWorkflow(
       })
       .where(eq(workflowStepRuns.id, id))
       .run();
+    // If the step failed, fetch the step row and send an alert email.
+    if (status === "failed") {
+      try {
+        const row = db
+          .select()
+          .from(workflowStepRuns)
+          .where(eq(workflowStepRuns.id, id))
+          .get();
+        // If a template id is attached to the step, try to load it and use it.
+        const tmplId = row?.templateId ?? null;
+        if (tmplId) {
+          const tmpl = db
+            .select()
+            .from(emailTemplate)
+            .where(eq(emailTemplate.id, tmplId))
+            .get();
+          if (tmpl) {
+            sendEmail(tmpl.subject, tmpl.content, {
+              runId: row?.runId ?? null,
+              stepId: id,
+              templateId: tmplId,
+            });
+            return;
+          }
+        }
+        // Fallback: send a generic alert if no template found.
+        const subject = `Workflow step failed: ${row?.stepKey ?? id}`;
+        const content = `A workflow step failed.\n\nrunId: ${row?.runId ?? "unknown"}\nstepId: ${id}\nstepKey: ${row?.stepKey ?? "unknown"}\nerror: ${row?.errorMessage ?? error ?? "unknown"}\n\nOutput: ${row?.outputJson ?? JSON.stringify(output)}`;
+        sendEmail(subject, content, { runId: row?.runId ?? null, stepId: id });
+      } catch {
+        // ignore email failures
+      }
+    }
   };
 
   const doctors = listDoctorProfiles();

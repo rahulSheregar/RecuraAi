@@ -20,6 +20,7 @@ export const workflowStepRuns = sqliteTable(
     runId: text("run_id")
       .notNull()
       .references(() => workflowRuns.id, { onDelete: "cascade" }),
+    templateId: text("template_id"),
     /** e.g. transcribe | triage | extract_intent | check_availability | reply */
     stepKey: text("step_key").notNull(),
     /** pending | running | succeeded | failed | skipped */
@@ -61,6 +62,17 @@ export const doctorProfiles = sqliteTable("doctor_profiles", {
   updatedAt: integer("updated_at", { mode: "number" }).notNull(),
 });
 
+
+
+/** Email templates for notifications and messages. */
+export const emailTemplate = sqliteTable("email_template", {
+  id: text("id").primaryKey(),
+  subject: text("subject").notNull(),
+  content: text("content").notNull(),
+  createdAt: integer("created_at", { mode: "number" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "number" }).notNull(),
+});
+
 export type WorkflowRun = typeof workflowRuns.$inferSelect;
 export type WorkflowRunInsert = typeof workflowRuns.$inferInsert;
 export type WorkflowStepRun = typeof workflowStepRuns.$inferSelect;
@@ -69,3 +81,5 @@ export type AppointmentStub = typeof appointmentStubs.$inferSelect;
 export type AppointmentStubInsert = typeof appointmentStubs.$inferInsert;
 export type DoctorProfileRow = typeof doctorProfiles.$inferSelect;
 export type DoctorProfileRowInsert = typeof doctorProfiles.$inferInsert;
+export type EmailTemplateRow = typeof emailTemplate.$inferSelect;
+export type EmailTemplateRowInsert = typeof emailTemplate.$inferInsert;

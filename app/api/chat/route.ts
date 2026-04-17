@@ -4,13 +4,18 @@ import { eq, max } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { getDb } from "@/lib/db/sqlite";
-import { workflowRuns, workflowStepRuns } from "@/lib/db/schema";
+import { workflowRuns, workflowStepRuns, emailTemplate } from "@/lib/db/schema";
 import {
   DEFAULT_CHAT_MODEL,
   executeChatSchedulingWorkflow,
   parseRunMetadata,
+  buildIntentPrompt,
+  fetchIntentFromOpenAI,
+  isoToday,
   type ChatMessage,
 } from "@/lib/workflow/chat-scheduling";
+import { listDoctorProfiles } from "@/lib/db/doctors";
+import { sendEmail } from "@/lib/email-service/email-service";
 
 export async function POST(request: Request) {
   const db = getDb();
@@ -23,6 +28,7 @@ export async function POST(request: Request) {
       schedulingPromptTemplate?: unknown;
       threadId?: unknown;
       existingRunId?: unknown;
+      templateId?: unknown;
     };
 
     const apiKeyFromClient =
@@ -136,12 +142,59 @@ export async function POST(request: Request) {
         .run();
     }
 
+    
+
+    // Before running the full workflow, run a quick intent extraction so we can
+    // notify via email if the intent is negative (out_of_scope) using the provided template.
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
     const openaiModel = process.env.OPENAI_MODEL?.trim() || DEFAULT_CHAT_MODEL;
     const schedulingPromptTemplate =
       typeof body.schedulingPromptTemplate === "string"
         ? body.schedulingPromptTemplate
         : null;
+    const templateId =
+      typeof body.templateId === "string" && body.templateId.trim()
+        ? body.templateId.trim()
+        : null;
+
+    try {
+      const doctors = listDoctorProfiles();
+      const extractionPrompt = buildIntentPrompt(
+        isoToday(),
+        timezone,
+        doctors,
+        schedulingPromptTemplate,
+      );
+      const chatHistoryTail = chatHistory
+        .filter((m) => m.role === "user" || m.role === "assistant")
+        .slice(-8)
+        .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
+      const fetched = await fetchIntentFromOpenAI({
+        openaiKey: key,
+        model: openaiModel,
+        extractionPrompt,
+        chatHistoryTail,
+      });
+      if (fetched.ok) {
+        const intent = fetched.intent;
+        if (intent.scope === "out_of_scope" && templateId) {
+          try {
+            const tmpl = db.select().from(emailTemplate).where(eq(emailTemplate.id, templateId)).get();
+            if (tmpl) {
+              sendEmail(tmpl.subject, tmpl.content, {
+                runId,
+                templateId,
+                reason: "intent_out_of_scope",
+              });
+            }
+          } catch {
+            // ignore email/template lookup errors
+          }
+        }
+      }
+    } catch {
+      // ignore extraction errors here; executor will still run
+    }
 
     const result = await executeChatSchedulingWorkflow({
       db,
@@ -154,6 +207,7 @@ export async function POST(request: Request) {
       openaiKey: key,
       openaiModel,
       schedulingPromptTemplate,
+      templateId,
       timezone,
     });
 

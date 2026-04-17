@@ -6,6 +6,13 @@ import * as React from "react";
 import { useAiSettings } from "@/components/ai-settings-provider";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -53,6 +60,10 @@ const MAIN_PANEL_HEIGHT_CLASS = "h-[min(50vh,22rem)]";
 
 export function AudioChatTabs({ className }: { className?: string }) {
   const { apiKey, prompts } = useAiSettings();
+  const [templates, setTemplates] = React.useState<
+    { id: string; subject: string; content: string }[]
+  >([]);
+  const [selectedTemplateId, setSelectedTemplateId] = React.useState<string | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [audioFiles, setAudioFiles] = React.useState<File[]>([]);
   const [audioJobs, setAudioJobs] = React.useState<AudioJob[]>([]);
@@ -69,6 +80,24 @@ export function AudioChatTabs({ className }: { className?: string }) {
   React.useEffect(() => {
     scrollAnchorRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isSending]);
+
+  React.useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/template");
+        if (!res.ok) return;
+        const data = (await res.json()) as unknown;
+        if (!mounted) return;
+        setTemplates(Array.isArray(data) ? (data as any[]) : []);
+      } catch {
+        // ignore
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const appendAudioFiles = React.useCallback((incoming: Iterable<File>) => {
     const accepted = [...incoming].filter(isLikelyAudioFile);
@@ -200,6 +229,7 @@ export function AudioChatTabs({ className }: { className?: string }) {
             apiKey: apiKey.trim() || undefined,
             schedulingPromptTemplate:
               prompts.schedulingPromptTemplate.trim() || undefined,
+            templateId: selectedTemplateId || undefined,
           }),
         });
         const chatData = (await chatRes.json()) as { message?: string; error?: string };
@@ -252,6 +282,7 @@ export function AudioChatTabs({ className }: { className?: string }) {
           apiKey: apiKey.trim() || undefined,
           schedulingPromptTemplate:
             prompts.schedulingPromptTemplate.trim() || undefined,
+          templateId: selectedTemplateId || undefined,
         }),
       });
       const data = (await res.json()) as { message?: string; error?: string };
@@ -487,6 +518,27 @@ export function AudioChatTabs({ className }: { className?: string }) {
             <p className="text-muted-foreground text-xs">
               Session: <code>{chatThreadId.slice(0, 8)}</code>
             </p>
+          <div className="flex items-center gap-2">
+            <Select
+              value={selectedTemplateId ?? ""}
+              onValueChange={(v) => {
+                const id = v || null;
+                setSelectedTemplateId(id);
+                const tmpl = templates.find((t) => t.id === id);
+                if (tmpl) setInput(tmpl.content);
+              }}
+            >
+              <SelectTrigger className="w-[14rem]">
+                <SelectValue placeholder="Insert template" />
+              </SelectTrigger>
+              <SelectContent>
+                {templates.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.subject}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Button
               type="button"
               variant="outline"
@@ -500,6 +552,7 @@ export function AudioChatTabs({ className }: { className?: string }) {
             >
               New chat session
             </Button>
+          </div>
           </div>
           <ScrollArea
             className={cn(

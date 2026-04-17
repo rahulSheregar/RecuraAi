@@ -1,0 +1,1 @@
+ALTER TABLE `workflow_step_runs` ADD `template_id` text;
